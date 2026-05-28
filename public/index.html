@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wagenident — UIC-Wagennummern erkennen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --bg:#f7f6f2; --surface:#fff; --surface2:#f3f0ec; --text:#28251d; --muted:#6f6d68;
+      --primary:#01696f; --primary2:#0c4e54; --border:#d4d1ca;
+      --ok:#2e5c10; --okbg:#e4f0db;
+      --check:#a56600; --checkbg:#ffe7bf;
+      --block:#b54747; --blockbg:#f9d9d9;
+      --r:16px; --r2:12px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,sans-serif;background:linear-gradient(180deg,#f7f6f2 0%,#ece8e1 100%);color:var(--text)}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 80px}
+    .hero,.panel{background:rgba(255,255,255,.94);border:1px solid rgba(40,37,29,.08);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.06)}
+    .hero{padding:28px}
+    .panel{padding:20px;margin-top:16px}
+    h1{margin:0 0 10px;font-size:clamp(26px,4.5vw,38px);line-height:1.1}
+    p{margin:0;color:var(--muted)}
+    .pill{display:inline-block;margin-bottom:12px;padding:8px 12px;border-radius:999px;background:var(--surface2);color:var(--muted);font-size:12px}
+    .cols{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+    label{display:block;margin-bottom:8px;font-size:14px;font-weight:600}
+    select,input,textarea{width:100%;padding:14px;border:1px solid var(--border);border-radius:12px;font:inherit;background:#fff}
+    .dropzone{border:2px dashed rgba(1,105,111,.35);background:#e9f4f3;border-radius:var(--r);padding:18px}
+    .drop-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:center}
+    .filebtn{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 18px;border-radius:999px;font-weight:600;cursor:pointer;background:#fff;color:var(--text);border:1px solid rgba(40,37,29,.12)}
+    button{min-height:46px;border:none;border-radius:999px;padding:0 18px;font:inherit;font-weight:600;cursor:pointer}
+    .primary{background:var(--primary);color:#fff}
+    .primary:hover{background:var(--primary2)}
+    .primary:disabled{background:#9ec3c5;cursor:not-allowed}
+    .secondary{background:#fff;color:var(--text);border:1px solid rgba(40,37,29,.12)}
+    .secondary:disabled{opacity:.5;cursor:not-allowed}
+    .ghost{background:transparent;color:var(--muted)}
+    .hint,.footer,.mini{color:var(--muted);font-size:12px}
+    .status{margin-top:12px;font-size:14px;min-height:20px}
+    .ok{color:var(--ok)} .err{color:var(--block)} .warn{color:var(--check)}
+    table{width:100%;border-collapse:collapse;margin-top:14px}
+    th,td{text-align:left;padding:12px 10px;border-bottom:1px solid rgba(40,37,29,.08);font-size:14px;vertical-align:top}
+    th{color:var(--muted);font-weight:600}
+    .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+    .chip{display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid rgba(40,37,29,.08);border-radius:999px;padding:8px 12px;font-size:13px}
+    .chip button{min-height:auto;padding:0 4px;background:none;color:#b0407f;border:none;font-size:16px;line-height:1}
+    .num-input{min-width:200px;font-family:'SFMono-Regular',Consolas,monospace}
+    .badge{display:inline-block;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+    .b-ok{background:var(--okbg);color:var(--ok)}
+    .b-check{background:var(--checkbg);color:var(--check)}
+    .b-block{background:var(--blockbg);color:var(--block)}
+    .reason{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4}
+    .summary{display:grid;gap:8px;grid-template-columns:repeat(3,1fr);margin-top:14px}
+    .sumcard{padding:12px;border-radius:12px;border:1px solid rgba(40,37,29,.08);text-align:center}
+    .sumcard small{display:block;color:var(--muted);font-size:11px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+    .sumcard strong{font-size:22px}
+    .sum-ok{background:var(--okbg)} .sum-check{background:var(--checkbg)} .sum-block{background:var(--blockbg)}
+    .download-panel{display:none;margin-top:16px;padding:18px;border-radius:12px;background:#f8fafb;border:1px solid rgba(40,37,29,.08)}
+    .download-link{display:inline-block;margin-top:10px;color:var(--primary);font-weight:700;text-decoration:underline}
+    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;padding:20px}
+    .modal-bg.show{display:flex}
+    .modal{background:#fff;border-radius:var(--r);padding:24px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+    .modal h2{margin:0 0 12px;font-size:20px}
+    .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+    .thumb{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border);background:#eee}
+    .file-cell{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+    .file-cell .name{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    @media (max-width:760px){.cols,.summary{grid-template-columns:1fr}.hero{padding:20px}th,td{padding:10px 6px;font-size:13px}.thumb{width:48px;height:36px}.file-cell .name{max-width:90px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="pill">HTML-App + Vercel Serverless + Google Vision</div>
+      <h1>Wagenident</h1>
+      <p>UIC-Wagennummern aus Fotos erkennen. Auto-OK nur wenn Format, Prüfziffer und Länderschlüssel stimmen — sonst manuelle Prüfung.</p>
+    </section>
+
+    <section class="panel cols">
+      <div>
+        <label for="standort">Standort</label>
+        <select id="standort">
+          <option value="Zossen">Zossen</option>
+          <option value="Trebbin">Trebbin</option>
+        </select>
+        <div class="hint" style="margin-top:8px">Wird allen neu hinzugefügten Bildern zugeordnet.</div>
+      </div>
+      <div>
+        <label for="emailInput">E-Mail-Adresse hinzufügen</label>
+        <div class="drop-actions" style="margin-top:0">
+          <input id="emailInput" type="email" placeholder="name@firma.de" />
+          <button class="secondary" id="addEmailBtn" type="button">Hinzufügen</button>
+        </div>
+        <div class="mini" style="margin-top:8px">Verteiler unten zeigt alle gespeicherten Empfänger.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <label>Mailverteiler</label>
+      <div id="emailChips" class="chips"></div>
+      <div class="mini" id="emailEmpty">Noch keine Adresse gespeichert.</div>
+    </section>
+
+    <section class="panel">
+      <label>Bilder auswählen oder aufnehmen</label>
+      <div class="dropzone">
+        <div class="drop-actions">
+          <label class="filebtn">Aus Galerie<input id="galleryInput" type="file" accept="image/*" multiple hidden /></label>
+          <label class="filebtn">Kamera<input id="cameraInput" type="file" accept="image/*" capture="environment" multiple hidden /></label>
+          <span id="fileCount" class="hint">Keine Bilder ausgewählt.</span>
+        </div>
+      </div>
+      <div class="drop-actions">
+        <button class="primary" id="processBtn">Bilder auswerten</button>
+        <button class="secondary" id="excelBtn" disabled>Excel herunterladen</button>
+        <button class="secondary" id="mailBtn" disabled>Mail vorbereiten</button>
+        <button class="ghost" id="resetBtn">Zurücksetzen</button>
+      </div>
+      <div class="status" id="status">Bereit.</div>
+      <div class="summary" id="summary" style="display:none">
+        <div class="sumcard sum-ok"><small>Auto-OK</small><strong id="sumOk">0</strong></div>
+        <div class="sumcard sum-check"><small>Bitte prüfen</small><strong id="sumCheck">0</strong></div>
+        <div class="sumcard sum-block"><small>Blockiert</small><strong id="sumBlock">0</strong></div>
+      </div>
+      <div id="downloadPanel" class="download-panel">
+        <div><strong>Datei bereit:</strong> <a id="downloadLink" class="download-link" href="#">wagennummern.xlsx</a></div>
+        <div class="hint" style="margin-top:6px">Auf den Dateinamen tippen, um die Tabelle zu öffnen oder zu speichern.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <label>Erkannte Datensätze</label>
+      <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Wagennummer</th>
+            <th>Standort</th>
+            <th>Bild</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody">
+          <tr><td colspan="5" style="color:var(--muted)">Noch keine Daten.</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="footer" style="margin-top:12px">
+        <strong>Auto-OK</strong>: 12-stellig, Prüfziffer korrekt, Länderschlüssel in Whitelist, hohe OCR-Confidence.
+        <strong>Bitte prüfen</strong>: gültig, aber mittlere Confidence oder Mehrdeutigkeit.
+        <strong>Blockiert</strong>: nicht eindeutig — manuelle Eingabe nötig.
+      </div>
+    </section>
+  </main>
+
+  <!-- Override-Modal -->
+  <div class="modal-bg" id="overrideModal">
+    <div class="modal">
+      <h2>Mit blockierten Zeilen exportieren?</h2>
+      <p id="overrideText">Es gibt noch Zeilen ohne sichere Erkennung. Trotzdem fortfahren?</p>
+      <div class="modal-actions">
+        <button class="ghost" id="overrideCancel">Abbrechen</button>
+        <button class="primary" id="overrideConfirm">Trotzdem fortfahren</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

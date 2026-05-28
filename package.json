@@ -1,0 +1,14 @@
+{
+  "name": "wagenident",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/uic.test.mjs && node test/ocr.test.mjs",
+    "test:uic": "node test/uic.test.mjs",
+    "test:ocr": "node test/ocr.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

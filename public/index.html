@@ -67,8 +67,15 @@
     .modal h2{margin:0 0 12px;font-size:20px}
     .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
     .thumb{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border);background:#eee}
+    .thumb-zoom{cursor:zoom-in;transition:transform .12s ease}
+    .thumb-zoom:hover{transform:scale(1.05);border-color:var(--primary)}
     .file-cell{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
     .file-cell .name{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .status-select{margin-top:6px;min-width:140px;padding:6px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer}
+    .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;align-items:center;justify-content:center;padding:16px}
+    .lightbox.show{display:flex}
+    .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    .lightbox-close{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
     @media (max-width:760px){.cols,.summary{grid-template-columns:1fr}.hero{padding:20px}th,td{padding:10px 6px;font-size:13px}.thumb{width:48px;height:36px}.file-cell .name{max-width:90px}}
   </style>
 </head>
@@ -122,13 +129,9 @@
       </div>
       <div class="status" id="status">Bereit.</div>
       <div class="summary" id="summary" style="display:none">
-        <div class="sumcard sum-ok"><small>Auto-OK</small><strong id="sumOk">0</strong></div>
+        <div class="sumcard sum-ok"><small>OK (Auto + Manuell)</small><strong id="sumOk">0</strong></div>
         <div class="sumcard sum-check"><small>Bitte prüfen</small><strong id="sumCheck">0</strong></div>
         <div class="sumcard sum-block"><small>Blockiert</small><strong id="sumBlock">0</strong></div>
-      </div>
-      <div id="downloadPanel" class="download-panel">
-        <div><strong>Datei bereit:</strong> <a id="downloadLink" class="download-link" href="#">wagennummern.xlsx</a></div>
-        <div class="hint" style="margin-top:6px">Auf den Dateinamen tippen, um die Tabelle zu öffnen oder zu speichern.</div>
       </div>
     </section>
 
@@ -152,11 +155,19 @@
       </div>
       <div class="footer" style="margin-top:12px">
         <strong>Auto-OK</strong>: 12-stellig, Prüfziffer korrekt, Länderschlüssel in Whitelist, hohe OCR-Confidence.
+        <strong>Manuell-OK</strong>: Du hast die Nummer geprüft und freigegeben.
         <strong>Bitte prüfen</strong>: gültig, aber mittlere Confidence oder Mehrdeutigkeit.
-        <strong>Blockiert</strong>: nicht eindeutig — manuelle Eingabe nötig.
+        <strong>Blockiert</strong>: nicht eindeutig — manuelle Eingabe oder Statuswahl nötig.
+        <br><span class="hint">Tipp: Auf das Bild klicken öffnet eine große Vorschau. Status lässt sich über das Dropdown auf „Manuell-OK“ setzen.</span>
       </div>
     </section>
   </main>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
+    <img id="lightboxImg" src="" alt="">
+  </div>
 
   <!-- Override-Modal -->
   <div class="modal-bg" id="overrideModal">

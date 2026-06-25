@@ -13,9 +13,16 @@ export const CFG = {
 };
 
 const COUNTRY_NAMES = {
-  '80': 'Deutschland', '86': 'Dänemark', '51': 'Polen', '54': 'Tschechien',
-  '81': 'Österreich', '85': 'Schweiz',   '87': 'Frankreich', '82': 'Luxemburg',
-  '88': 'Belgien',    '84': 'Niederlande'
+  '80': 'Deutschland',
+  '86': 'Dänemark',
+  '51': 'Polen',
+  '54': 'Tschechien',
+  '81': 'Österreich',
+  '85': 'Schweiz',
+  '87': 'Frankreich',
+  '82': 'Luxemburg',
+  '88': 'Belgien',
+  '84': 'Niederlande',
 };
 
 // Häufige OCR-Verwechslungen, nur für Zeichen, die an Ziffernpositionen
@@ -30,8 +37,10 @@ const DIGIT_SUBSTITUTIONS = {
   'G': '6', 'b': '6',
   'T': '7',
   'B': '8',
-  'g': '9', 'q': '9'
+  'g': '9', 'q': '9',
 };
+
+const DIGIT_SUBSTITUTIONS_RE = new RegExp('[' + Object.keys(DIGIT_SUBSTITUTIONS).join('') + ']', 'g');
 
 /**
  * Berechnet die UIC-Selbstkontrollziffer (Luhn-mod-10 mit Wechselgewichten 2,1,...,2)
@@ -44,9 +53,6 @@ export function uicCheckDigit(elevenDigits) {
     throw new Error('uicCheckDigit erwartet genau 11 Ziffern');
   }
   // Multiplikatoren: Position 1 (links) bekommt *2, Position 2 *1, usw.
-  // Das ist äquivalent zu "von rechts mit 2,1,2,1,..." weil die Prüfziffer
-  // selbst (Position 12) mit *2 multipliziert würde — wir berechnen sie aber.
-  // Für 11 Stellen ergibt sich Muster [2,1,2,1,2,1,2,1,2,1,2].
   let sum = 0;
   for (let i = 0; i < 11; i++) {
     const d = Number(elevenDigits[i]);
@@ -86,12 +92,9 @@ export function formatUic(twelveDigits) {
  */
 export function normalizeToDigits(raw) {
   if (!raw || typeof raw !== 'string') return null;
-  // Substitutionen Buchstabe -> Ziffer
   const substituted = raw.split('').map(ch => DIGIT_SUBSTITUTIONS[ch] ?? ch).join('');
-  // Nur Ziffern behalten
   const digits = substituted.replace(/\D/g, '');
   if (digits.length === 12) return digits;
-  // Versuche, eine 12er-Folge innerhalb längerer Folgen zu finden
   if (digits.length > 12) {
     // bevorzuge die erste 12er-Folge, die mit erlaubtem Länderschlüssel beginnt
     for (let i = 0; i <= digits.length - 12; i++) {
@@ -105,7 +108,7 @@ export function normalizeToDigits(raw) {
 
 /**
  * Extrahiert UIC-Kandidaten aus Freitext (z.B. Vision full text).
- * Sucht zeilenweise nach 12-stelligen Mustern mit/ohne Trennzeichen.
+ * Sucht zeilenweise und zusätzlich über mehrere Zeilen hinweg nach 12-stelligen Mustern.
  * @param {string} text
  * @returns {string[]} Liste von 12-stelligen Ziffernfolgen (dedupliziert, Reihenfolge erhalten)
  */
@@ -114,60 +117,84 @@ export function findUicCandidates(text) {
   const found = [];
   const seen = new Set();
   const lines = text.split(/\r?\n/);
+
   // Regex für UIC-Form mit beliebigen Trennern (Leerzeichen, Bindestrich, kein Trenner)
-  const re = /(?<![\d])(\d{2})[\s\-–—]*(\d{2})[\s\-–—]*(\d{4})[\s\-–—]*(\d{3})[\s\-–—]*(\d)(?![\d])/g;
+  const re = /(?<!\d)(\d[\d \-]{10,17}\d)(?!\d)/g;
+
+  // 1. Zeilenweise suchen
   for (const line of lines) {
-    // 1) Direkt strenge Form
+    const sub = line.replace(DIGIT_SUBSTITUTIONS_RE, ch => DIGIT_SUBSTITUTIONS[ch] ?? ch);
     let m;
-    while ((m = re.exec(line)) !== null) {
-      const d = m[1] + m[2] + m[3] + m[4] + m[5];
-      if (!seen.has(d)) { seen.add(d); found.push(d); }
+    re.lastIndex = 0;
+    while ((m = re.exec(sub)) !== null) {
+      const digits = m[1].replace(/\D/g, '');
+      if (digits.length === 12 && !seen.has(digits)) {
+        seen.add(digits);
+        found.push(digits);
+      }
     }
-    // 2) Maskenbasierte Normalisierung pro Zeile (falls OCR Buchstaben einsetzte)
-    const norm = normalizeToDigits(line);
-    if (norm && !seen.has(norm)) { seen.add(norm); found.push(norm); }
   }
-  // 3) Fallback: gesamte Vorlage normalisieren
-  if (!found.length) {
-    const norm = normalizeToDigits(text);
-    if (norm) found.push(norm);
+
+  // 2. Mehrzeiliger Merge: Ziffern aus 2–4 aufeinanderfolgenden Zeilen verketten
+  for (let window = 2; window <= 4; window++) {
+    for (let i = 0; i <= lines.length - window; i++) {
+      const mergedDigits = lines
+        .slice(i, i + window)
+        .map(l => l.replace(/[^0-9]/g, ''))
+        .join('');
+      if (mergedDigits.length < 12) continue;
+
+      for (let j = 0; j <= mergedDigits.length - 12; j++) {
+        const cand = mergedDigits.slice(j, j + 12);
+        if (!CFG.ALLOWED_COUNTRY_CODES.includes(cand.slice(2, 4))) continue;
+        if (!seen.has(cand)) {
+          seen.add(cand);
+          found.push(cand);
+        }
+      }
+    }
   }
+
   return found;
 }
 
 /**
- * Vollständige Validierung einer 12-stelligen UIC-Nummer.
- * @returns {{valid:boolean, reasons:string[], country:string|null}}
+ * Validiert eine UIC und liefert Metadaten + Gründe zurück.
  */
 export function validateUic(twelveDigits) {
   const reasons = [];
   if (!/^\d{12}$/.test(twelveDigits)) {
-    return { valid: false, reasons: ['Nicht 12 Stellen'], country: null };
+    reasons.push('Keine 12-stellige Ziffernfolge');
   }
-  const country = twelveDigits.slice(2, 4);
-  const countryOk = CFG.ALLOWED_COUNTRY_CODES.includes(country);
-  if (!countryOk) reasons.push(`Länderschlüssel ${country} nicht in Whitelist`);
-  const checksumOk = isValidUicChecksum(twelveDigits);
-  if (!checksumOk) reasons.push('Prüfziffer falsch');
-  return {
-    valid: countryOk && checksumOk,
-    reasons,
-    country: COUNTRY_NAMES[country] || null
-  };
+  const countryCode = twelveDigits.slice(2, 4);
+  let country = null;
+  if (!CFG.ALLOWED_COUNTRY_CODES.includes(countryCode)) {
+    reasons.push(`Ländercode ${countryCode} nicht erlaubt`);
+  } else {
+    country = COUNTRY_NAMES[countryCode] || null;
+  }
+  if (!isValidUicChecksum(twelveDigits)) {
+    reasons.push('Prüfziffer falsch');
+  }
+  return { valid: reasons.length === 0, country, reasons };
 }
 
 /**
- * Trifft die finale Statusentscheidung aus einer Kandidatenliste + Confidence.
- * @param {Array<{digits:string, confidence:number}>} candidates - sortiert nach Confidence absteigend
- * @returns {{status:'auto_ok'|'check'|'blocked', digits:string|null, formatted:string|null, reasons:string[], country:string|null, confidence:number|null}}
+ * Entscheidet Status anhand von Kandidaten aus OCR (digits + confidence).
+ * @param {{digits:string, confidence:number}[]} candidates
  */
 export function decideStatus(candidates) {
   if (!candidates || !candidates.length) {
-    return { status: 'blocked', digits: null, formatted: null,
-             reasons: ['Keine Nummer im Bild erkannt'], country: null, confidence: null };
+    return {
+      status: 'blocked',
+      digits: null,
+      formatted: null,
+      reasons: ['Keine Nummer im Bild erkannt'],
+      country: null,
+      confidence: null,
+    };
   }
 
-  // Sortiere defensiv
   const sorted = [...candidates].sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
   const top = sorted[0];
   const second = sorted[1];
@@ -175,9 +202,7 @@ export function decideStatus(candidates) {
   const v = validateUic(top.digits);
   const reasons = [...v.reasons];
 
-  // Mehrdeutigkeit: zweiter Kandidat zu nah dran?
-  if (second && (top.confidence - second.confidence) < CFG.MIN_AMBIGUITY_GAP
-              && second.digits !== top.digits) {
+  if (second && (top.confidence - second.confidence) < CFG.MIN_AMBIGUITY_GAP && second.digits !== top.digits) {
     reasons.push('Mehrere ähnlich starke Kandidaten');
   }
 
@@ -188,11 +213,10 @@ export function decideStatus(candidates) {
       formatted: top.digits.length === 12 ? formatUic(top.digits) : top.digits,
       reasons,
       country: v.country,
-      confidence: top.confidence
+      confidence: top.confidence,
     };
   }
 
-  // valid: jetzt Confidence-Stufen
   if (top.confidence >= CFG.MIN_CONFIDENCE_AUTO && !reasons.length) {
     return {
       status: 'auto_ok',
@@ -200,40 +224,50 @@ export function decideStatus(candidates) {
       formatted: formatUic(top.digits),
       reasons: [],
       country: v.country,
-      confidence: top.confidence
+      confidence: top.confidence,
     };
   }
+
   if (top.confidence >= CFG.MIN_CONFIDENCE_CHECK) {
-    if (!reasons.length) reasons.push(`OCR-Confidence ${(top.confidence*100).toFixed(0)}% < ${(CFG.MIN_CONFIDENCE_AUTO*100).toFixed(0)}%`);
+    if (!reasons.length) {
+      reasons.push(`OCR-Confidence ${(top.confidence * 100).toFixed(0)}% < ${(CFG.MIN_CONFIDENCE_AUTO * 100).toFixed(0)}%`);
+    }
     return {
       status: 'check',
       digits: top.digits,
       formatted: formatUic(top.digits),
       reasons,
       country: v.country,
-      confidence: top.confidence
+      confidence: top.confidence,
     };
   }
-  reasons.push(`OCR-Confidence ${(top.confidence*100).toFixed(0)}% zu niedrig`);
+
+  reasons.push(`OCR-Confidence ${(top.confidence * 100).toFixed(0)}% zu niedrig`);
   return {
     status: 'blocked',
     digits: top.digits,
     formatted: formatUic(top.digits),
     reasons,
     country: v.country,
-    confidence: top.confidence
+    confidence: top.confidence,
   };
 }
 
 /**
  * Convenience: Validiert eine manuell eingegebene Nummer (Freitext)
- * und gibt Statusentscheidung zurück, als wäre sie mit Confidence 1.0 erkannt worden.
+ * und gibt Statusentscheidung zurück, als wäre sie mit Confidence 1.0
  */
 export function decideManualEntry(rawInput) {
   const digits = normalizeToDigits(rawInput);
   if (!digits) {
-    return { status: 'blocked', digits: null, formatted: null,
-             reasons: ['Eingabe enthält keine 12 Ziffern'], country: null, confidence: null };
+    return {
+      status: 'blocked',
+      digits: null,
+      formatted: null,
+      reasons: ['Eingabe enthält keine 12 Ziffern'],
+      country: null,
+      confidence: null,
+    };
   }
   return decideStatus([{ digits, confidence: 1.0 }]);
 }

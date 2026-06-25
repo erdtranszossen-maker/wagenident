@@ -66,7 +66,8 @@ const STATE = {
   emails: [],
   selectedFiles: [],
   cameraFiles: [],
-  overrideCallback: null
+  overrideCallback: null,
+  excelDownloaded: false,   // Gate für Schritt 3 (Mail vorbereiten)
 };
 
 // ---------- Persistence ----------
@@ -517,30 +518,39 @@ function renderRows() {
     const badgeCls = STATUS_CLASS[r.status] || 'b-block';
     return `
       <tr data-id="${r.id}">
-        <td>${r.datum}</td>
-        <td>
-          <input class="num-input" data-id="${r.id}" value="${escapeHtml(val)}" placeholder="manuell eingeben" inputmode="numeric" />
+        <td class="col-status">
+          <span class="badge ${badgeCls}">${STATUS_LABEL[r.status] || r.status}</span>
+          ${statusDropdown(r)}
+        </td>
+        <td class="col-num">
+          <input class="num-input" data-id="${r.id}" value="${escapeHtml(val)}" placeholder="manuell eingeben" inputmode="numeric" autocomplete="off" />
           ${reason}
           ${country}
           ${reasonRow}
         </td>
-        <td>${escapeHtml(r.standort)}</td>
-        <td><div class="file-cell">${thumb}<span class="name" title="${escapeHtml(r.fileName)}">${escapeHtml(r.fileName)}</span></div></td>
-        <td>
-          <span class="badge ${badgeCls}">${STATUS_LABEL[r.status] || r.status}</span>
-          ${statusDropdown(r)}
-        </td>
+        <td class="col-img">${thumb}</td>
+        <td class="col-loc">${escapeHtml(r.standort)}<div class="reason" style="font-size:11px" title="${escapeHtml(r.fileName)}">${escapeHtml(r.fileName)}</div></td>
+        <td class="col-date">${r.datum}</td>
       </tr>`;
   }).join('');
 
-  // Wagennummer-Edit
+  // Wagennummer-Edit:
+  //  - 'input'  : Roh-Eingabe sofort in STATE festhalten, damit sie nicht verloren geht,
+  //               wenn der Nutzer zwischendurch auf das Bild klickt oder die Tabelle re-rendert.
+  //  - 'change' : volle Validierung + Re-Render.
   resultsBody.querySelectorAll('input.num-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const row = STATE.rows.find(x => x.id === inp.dataset.id);
+      if (!row) return;
+      row.formatted = inp.value;  // Roh-Anzeige, kein Re-Render
+      row.manualEdited = true;
+    });
     inp.addEventListener('change', () => {
       const row = STATE.rows.find(x => x.id === inp.dataset.id);
       if (!row) return;
       const decision = decideManualEntry(inp.value);
       row.digits = decision.digits;
-      row.formatted = decision.formatted;
+      row.formatted = decision.formatted || inp.value;  // Roh-Eingabe behalten, wenn (noch) ungültig
       row.status = decision.status === 'auto_ok' ? 'manual_ok' : decision.status;
       row.reasons = decision.reasons;
       row.country = decision.country;
@@ -599,7 +609,17 @@ function updateSummary() {
 function updateExportGates() {
   const hasRows = STATE.rows.length > 0;
   excelBtn.disabled = !hasRows;
+  // Mail bleibt klickbar; das Excel-Gate triggert beim Klick einen Hinweis.
+  // (So merkt der Nutzer, dass er Schritt 2 übersprungen hat, und kann bewusst weitermachen.)
   mailBtn.disabled  = !hasRows;
+  // visuelles Aria-Hint: 'aria-disabled' zeigt UI-Aufmerksamkeit, ohne Klicks zu blockieren
+  if (hasRows && !STATE.excelDownloaded) {
+    mailBtn.setAttribute('aria-disabled', 'true');
+    mailBtn.title = 'Bitte zuerst Schritt 2 ausführen: Excel herunterladen.';
+  } else {
+    mailBtn.removeAttribute('aria-disabled');
+    mailBtn.title = '';
+  }
 }
 
 // ---------- Lightbox ----------
@@ -607,12 +627,12 @@ function openLightbox(src, name) {
   lightboxImg.src = src;
   lightboxImg.alt = name || '';
   lightbox.classList.add('show');
-  document.body.style.overflow = 'hidden';
+  // KEIN body-overflow-Lock: das Eingabefeld in der Zeile darf weiterhin bedient werden,
+  // damit der Nutzer das Bild als Referenz nutzt und parallel tippt.
 }
 function closeLightbox() {
   lightbox.classList.remove('show');
   lightboxImg.src = '';
-  document.body.style.overflow = '';
 }
 lightboxClose.addEventListener('click', closeLightbox);
 lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
@@ -659,6 +679,8 @@ detailsModal.addEventListener('click', (e) => { if (e.target === detailsModal) c
 processBtn.addEventListener('click', async () => {
   refreshFileCount();
   if (!STATE.selectedFiles.length) { setStatus('Bitte Bilder auswählen.', 'err'); return; }
+  // Neue Auswertung: Excel-Gate zurücksetzen (Datensätze haben sich geändert)
+  STATE.excelDownloaded = false;
   processBtn.disabled = true; excelBtn.disabled = true; mailBtn.disabled = true;
   const files = STATE.selectedFiles;
   for (let i = 0; i < files.length; i++) {
@@ -677,21 +699,36 @@ processBtn.addEventListener('click', async () => {
 });
 
 // ---------- Excel-Export ----------
+// Spaltenreihenfolge (laut Anforderung):
+//  Wagennummer, Standort, Datum, Land, Status, Hinweise,
+//  OCR-Confidence, Manuell bearbeitet, OCR-Quelle, Bilddatei
 function buildWorkbook() {
   const data = STATE.rows.map(r => ({
-    Datum: r.datum,
     Wagennummer: r.formatted || r.digits || '',
     Standort: r.standort,
-    Bilddatei: r.fileName,
-    Status: STATUS_LABEL[r.status] || r.status,
+    Datum: r.datum,
     Land: r.country || '',
-    'OCR-Confidence': r.confidence != null ? Math.round(r.confidence*100) + '%' : '',
+    Status: STATUS_LABEL[r.status] || r.status,
+    Hinweise: (r.reasons || []).join(' · '),
+    'OCR-Confidence': r.confidence != null ? Math.round(r.confidence * 100) + '%' : '',
+    'Manuell bearbeitet': r.manualEdited ? 'Ja' : 'Nein',
     'OCR-Quelle': r.sourcePill || '',
-    Hinweise: (r.reasons||[]).join(' · '),
-    'Manuell bearbeitet': r.manualEdited ? 'Ja' : 'Nein'
+    Bilddatei: r.fileName,
   }));
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:12},{wch:22},{wch:12},{wch:30},{wch:14},{wch:14},{wch:14},{wch:16},{wch:40},{wch:18}];
+  // Spaltenbreiten in derselben Reihenfolge
+  ws['!cols'] = [
+    { wch: 22 }, // Wagennummer
+    { wch: 14 }, // Standort
+    { wch: 12 }, // Datum
+    { wch: 14 }, // Land
+    { wch: 14 }, // Status
+    { wch: 40 }, // Hinweise
+    { wch: 14 }, // OCR-Confidence
+    { wch: 18 }, // Manuell bearbeitet
+    { wch: 16 }, // OCR-Quelle
+    { wch: 30 }, // Bilddatei
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Wagennummern');
   return wb;
@@ -703,8 +740,8 @@ function triggerDownload() {
     XLSX.writeFile(wb, filename, { compression: true });
     setStatus(`Excel-Datei „${filename}" gespeichert.`, 'ok');
   } catch (e) {
-    const out = XLSX.write(wb, { bookType:'xlsx', type:'array', compression: true });
-    const blob = new Blob([out], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true });
+    const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
@@ -713,6 +750,9 @@ function triggerDownload() {
     setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
     setStatus(`Excel-Datei „${filename}" wird heruntergeladen.`, 'ok');
   }
+  // Excel-Gate öffnet sich -> Mail darf freigeschaltet werden
+  STATE.excelDownloaded = true;
+  updateExportGates();
 }
 function withBlockedGuard(action, kind) {
   const blocked = STATE.rows.filter(r => r.status === 'blocked').length;
@@ -729,30 +769,61 @@ overrideConfirm.addEventListener('click', () => {
 });
 excelBtn.addEventListener('click', () => withBlockedGuard(triggerDownload, 'Excel-Export'));
 
-// ---------- Mail ----------
-mailBtn.addEventListener('click', () => withBlockedGuard(() => {
-  if (!STATE.emails.length) { setStatus('Bitte mindestens eine E-Mail-Adresse hinzufügen.', 'err'); return; }
-  const to = STATE.emails.join(',');
-  const subject = encodeURIComponent(`Wagennummern ${standortEl.value} ${today()}`);
+// ---------- Mail-Vorbereitung mit Excel-Gate ----------
+// Mail-Body benutzt dieselbe Spaltenreihenfolge wie die Excel-Datei,
+// damit der Empfänger beides leicht abgleichen kann.
+function buildMailBody() {
+  const header = ['Wagennummer','Standort','Datum','Land','Status','Hinweise','OCR-Confidence','Manuell','OCR-Quelle','Bilddatei'];
+  const rows = STATE.rows.map(r => [
+    r.formatted || r.digits || 'NICHT ERKANNT',
+    r.standort,
+    r.datum,
+    r.country || '',
+    STATUS_LABEL[r.status] || r.status,
+    (r.reasons || []).join(' · '),
+    r.confidence != null ? Math.round(r.confidence * 100) + '%' : '',
+    r.manualEdited ? 'Ja' : 'Nein',
+    r.sourcePill || '',
+    r.fileName,
+  ].join(' | '));
   const lines = [
     `Standort: ${standortEl.value}`,
     `Datum: ${today()}`,
     '',
     'Datensätze:',
-    ...STATE.rows.map(r => `${r.datum} | ${r.formatted || r.digits || 'NICHT ERKANNT'} | ${r.standort} | ${r.fileName} | ${STATUS_LABEL[r.status]||r.status}`),
+    header.join(' | '),
+    ...rows,
     '',
     'Hinweis: Bitte die Excel-Datei aus der App anhängen.'
   ];
-  const body = encodeURIComponent(lines.join('\n'));
+  return lines.join('\n');
+}
+function sendMail() {
+  if (!STATE.emails.length) { setStatus('Bitte mindestens eine E-Mail-Adresse hinzufügen.', 'err'); return; }
+  const to = STATE.emails.join(',');
+  const subject = encodeURIComponent(`Wagennummern ${standortEl.value} ${today()}`);
+  const body = encodeURIComponent(buildMailBody());
   window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
   setStatus('Mail-Entwurf wurde vorbereitet.', 'ok');
-}, 'Mail-Versand'));
+}
+mailBtn.addEventListener('click', () => withBlockedGuard(() => {
+  // Wichtig: Mail erst nach Excel-Download. Wenn nicht heruntergeladen,
+  // öffnen wir einen Bestätigungs-Dialog. Wird er bestätigt, wird die Mail trotzdem gesendet.
+  if (!STATE.excelDownloaded) {
+    overrideText.textContent = 'Die Excel-Datei wurde noch nicht heruntergeladen. Mail trotzdem vorbereiten? Wir empfehlen, zuerst Schritt 2 (Excel herunterladen) auszuführen, damit der Empfänger die Datei anhängen kann.';
+    overrideModal.classList.add('show');
+    STATE.overrideCallback = sendMail;
+    return;
+  }
+  sendMail();
+}, 'Mail-Vorbereitung'));
 
 // ---------- Reset ----------
 resetBtn.addEventListener('click', () => {
   STATE.rows = [];
   STATE.selectedFiles = [];
   STATE.cameraFiles = [];
+  STATE.excelDownloaded = false;
   galleryInput.value = '';
   cameraInput.value = '';
   if (cameraAddInput) cameraAddInput.value = '';
@@ -762,6 +833,18 @@ resetBtn.addEventListener('click', () => {
   updateExportGates();
   setStatus('Zurückgesetzt.', 'ok');
 });
+
+// ---------- Test-Hooks (nur für automatische Tests; in Produktion harmlos) ----------
+if (typeof window !== 'undefined') {
+  // Wird ausschließlich vom E2E-Test gelesen. Schreibender Zugriff aus der UI
+  // ist nicht nötig und nicht vorgesehen.
+  window.__wagenident = Object.freeze({
+    get STATE() { return STATE; },
+    renderRows,
+    buildWorkbook,
+    updateExportGates,
+  });
+}
 
 // ---------- Init ----------
 loadPersist();

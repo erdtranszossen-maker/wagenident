@@ -102,7 +102,9 @@ test('findUicCandidates: Einzeltext mit einer Nummer', () => {
 
 test('findUicCandidates: mehrere Zeilen, mehrere Nummern', () => {
   const r = findUicCandidates('31 81 6650 286-0\nfoo\n51 80 0843 001-0');
-  eq(r, ['318166502860', '518008430010']);
+  // Beide echten Nummern müssen drin sein; Merge darf zusätzliche Folgen liefern.
+  truthy(r.includes('318166502860'));
+  truthy(r.includes('518008430010'));
 });
 
 test('findUicCandidates: ohne Trennzeichen', () => {
@@ -118,6 +120,57 @@ test('findUicCandidates: mit OCR-Buchstaben in einer Zeile', () => {
 test('findUicCandidates: leerer Text -> []', () => {
   eq(findUicCandidates(''), []);
   eq(findUicCandidates(null), []);
+});
+
+// ---------- Mehrzeilen-Schild (Column-Merge) ----------
+// Beispiel aus dem Feld: Schild mit 3 separaten Zeilen, die zusammen die UIC ergeben.
+// 31 RIV MC
+// 81 PL-BRX
+// 6650 286-0      (Stellen 5-11 + Prüfziffer; ergibt zusammen 31 81 6650 286-0)
+test('findUicCandidates: 3-zeiliges Schild AT-Beispiel', () => {
+  const txt = '31 RIV MC\n81 PL-BRX\n6650 286-0';
+  const r = findUicCandidates(txt);
+  truthy(r.includes('318166502860'), 'erwartet 318166502860 im Ergebnis, bekommen: ' + JSON.stringify(r));
+});
+
+// Polen-Schild (Stellen 3-4 = 51), Mehrzeilen-Schild im selben Format
+test('findUicCandidates: 3-zeiliges Schild PL-Beispiel', () => {
+  const eleven = '33510123456';
+  const cd = uicCheckDigit(eleven);
+  const twelve = eleven + cd;
+  const txt = `${twelve.slice(0,2)} RIV\n${twelve.slice(2,4)} PL-PKP\n${twelve.slice(4,8)} ${twelve.slice(8,11)}-${twelve.slice(11)}`;
+  const r = findUicCandidates(txt);
+  truthy(r.includes(twelve), 'erwartet ' + twelve + ' im Ergebnis, bekommen: ' + JSON.stringify(r));
+});
+
+test('findUicCandidates: Merge überspringt Zeilen mit Nicht-Ländercodes', () => {
+  // Wenn der Merge stur die ersten 12 Ziffern nimmt, kommt eine ungültige Nummer raus.
+  // Implementierung muss den Whitelist-Ländercode-Filter respektieren.
+  const txt = '99 Straße 12\nWagen 31\n81 6650 286-0';
+  const r = findUicCandidates(txt);
+  truthy(r.includes('318166502860'), 'erwartet 318166502860 trotz störender Zeile, bekommen: ' + JSON.stringify(r));
+});
+
+test('findUicCandidates: 2-Zeilen-Schild (Wagenklasse + Nummer)', () => {
+  // Manche Schilder haben nur 2 Zeilen: "31 81" / "6650 286-0"
+  const r = findUicCandidates('31 81\n6650 286-0');
+  truthy(r.includes('318166502860'), 'erwartet 318166502860, bekommen: ' + JSON.stringify(r));
+});
+
+test('findUicCandidates: 4-Zeilen-Schild (Land + RIV + Nummer1 + Nummer2)', () => {
+  // Schwierige reale Variante: 4 Zeilen, Merge muss bis Fenster=4 gehen
+  const r = findUicCandidates('D-DB\n31\n81\n6650 286-0');
+  truthy(r.includes('318166502860'), 'erwartet 318166502860, bekommen: ' + JSON.stringify(r));
+});
+
+test('findUicCandidates: ungültiger Ländercode -> kommt zwar als Kandidat, wird aber später geblockt', () => {
+  // Stellen 3-4 = "99" ist nicht in der Whitelist.
+  // Der zeilenweise Scan liefert die Folge trotzdem (Filterung passiert in validateUic).
+  // Der Column-Merge dagegen filtert direkt -> liefert keinen weiteren Kandidaten.
+  const r = findUicCandidates('11 99 1234 567-8');
+  const v = validateUic(r[0]);
+  falsy(v.valid, 'darf nicht als gültig markiert sein');
+  truthy(v.reasons.some(x => /Ländercode/.test(x)));
 });
 
 // ---------- validateUic ----------
@@ -227,11 +280,14 @@ test('Szenario: Vision-Text mit Rauschen', () => {
 test('Szenario: zwei Wagen auf einem Bild -> Mehrdeutigkeit', () => {
   const txt = '31 81 6650 286-0\n51 80 0843 001-0';
   const cands = findUicCandidates(txt);
-  eq(cands.length, 2);
-  // beide mit hoher Confidence -> Mehrdeutigkeit
+  // Der Mehrzeilen-Merge kann zusätzliche 12er-Folgen erzeugen.
+  // Wichtig: beide echten UICs sind enthalten und beide sind prüfzifferkonform.
+  truthy(cands.includes('318166502860'));
+  truthy(cands.includes('518008430010'));
+  // Beide mit hoher Confidence übergeben -> Status sollte 'check' sein (Mehrdeutigkeit).
   const r = decideStatus([
-    { digits: cands[0], confidence: 0.95 },
-    { digits: cands[1], confidence: 0.93 }
+    { digits: '318166502860', confidence: 0.95 },
+    { digits: '518008430010', confidence: 0.93 }
   ]);
   eq(r.status, 'check');
 });

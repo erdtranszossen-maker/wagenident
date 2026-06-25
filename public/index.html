@@ -47,6 +47,8 @@
     .primary:disabled{background:#9ec3c5;cursor:not-allowed}
     .secondary{background:#fff;color:var(--text);border:1px solid rgba(40,37,29,.12)}
     .secondary:disabled{opacity:.5;cursor:not-allowed}
+    /* aria-disabled: optisch ausgegraut, aber Klick möglich (zeigt dann Hinweis) */
+    .secondary[aria-disabled="true"]{opacity:.6;border-style:dashed}
     .ghost{background:transparent;color:var(--muted)}
     .small-btn{min-height:38px;padding:0 14px;font-size:13px}
     .btn-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
@@ -57,10 +59,30 @@
     .ok{color:var(--ok)} .err{color:var(--block)} .warn{color:var(--check)}
 
     /* Tabelle */
-    table{width:100%;border-collapse:collapse;margin-top:10px;min-width:520px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
     th,td{text-align:left;padding:10px 8px;border-bottom:1px solid rgba(40,37,29,.08);font-size:13.5px;vertical-align:top}
     th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(40,37,29,.08);border-radius:10px;background:#fff}
+    /* Variante A: feste Spaltenbreiten, Status klebt links */
+    table.results-table{min-width:720px}
+    table.results-table th.col-status,
+    table.results-table td.col-status{
+      position:sticky;left:0;background:#f8fafc;z-index:2;
+      border-right:1px solid rgba(40,37,29,.08);
+      min-width:96px;width:96px;
+    }
+    table.results-table th.col-num,
+    table.results-table td.col-num{min-width:230px;width:240px}
+    table.results-table th.col-img,
+    table.results-table td.col-img{min-width:68px;width:68px}
+    table.results-table th.col-loc,
+    table.results-table td.col-loc{min-width:120px;width:130px}
+    table.results-table th.col-date,
+    table.results-table td.col-date{min-width:104px;width:104px;white-space:nowrap}
+    /* Eingabefeld muss die volle Spaltenbreite nutzen, damit Prüfziffer sichtbar bleibt */
+    table.results-table td.col-num input.num-input{width:100%;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.5px}
+    /* Scroll-Hinweis unter der Tabelle */
+    .scroll-hint{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin-top:6px}
 
     /* Chips (Mailverteiler) */
     .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
@@ -96,9 +118,12 @@
     .file-cell{display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:var(--muted)}
     .file-cell .name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .status-select{margin-top:6px;min-width:130px;padding:6px 8px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer}
-    .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;align-items:center;justify-content:center;padding:16px}
+    /* Lightbox: schwebt oben, blockiert das Eingabefeld der Zeile NICHT.
+       Nutzer kann parallel im Eingabefeld der Wagennummer tippen. */
+    .lightbox{display:none;position:fixed;top:0;left:0;right:0;height:45vh;background:rgba(0,0,0,.94);z-index:200;align-items:center;justify-content:center;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);pointer-events:auto}
     .lightbox.show{display:flex}
     .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    .lightbox-hint{position:absolute;left:14px;bottom:8px;color:#e8e6e0;font-size:12px;opacity:.85}
     .lightbox-close{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
     /* Tipps-Box */
@@ -209,11 +234,11 @@
         <h4>Tipps für bessere Erkennung</h4>
         <ul>
           <li>Die Nummer soll das Bild ausfüllen.</li>
+          <li>Nur die UIC-Nummer fotografieren. Keine weiteren Zahlen auf dem Foto.</li>
           <li>Direkt von vorne, nicht schräg — Kamera parallel zur Wagenwand halten.</li>
           <li>Auf gute Beleuchtung achten: keine Schatten oder Gegenlicht. Blitz bei Bedarf einschalten.</li>
           <li>Nichts verdecken: Schmutz, Eis oder andere Sichtbehinderungen vor dem Foto ggf. entfernen.</li>
           <li>Stillhalten: Bild scharf, nicht verwackelt — bei Bedarf zweimal auslösen.</li>
-          <li>Nur eine Wagennummer pro Bild — auf das richtige Schild zoomen.</li>
         </ul>
       </div>
 
@@ -234,9 +259,9 @@
       </div>
 
       <div class="btn-row">
-        <button class="primary" id="processBtn">Bilder auswerten</button>
-        <button class="secondary" id="excelBtn" disabled>Excel herunterladen</button>
-        <button class="secondary" id="mailBtn" disabled>Mail vorbereiten</button>
+        <button class="primary" id="processBtn">1. Bilder auswerten</button>
+        <button class="secondary" id="excelBtn" disabled>2. Excel herunterladen</button>
+        <button class="secondary" id="mailBtn" disabled>3. Mail vorbereiten</button>
         <button class="ghost" id="resetBtn">Zurücksetzen</button>
       </div>
       <div class="status" id="status">Bereit.</div>
@@ -250,14 +275,14 @@
     <section class="panel">
       <label>Erkannte Datensätze</label>
       <div class="table-scroll">
-      <table>
+      <table class="results-table">
         <thead>
           <tr>
-            <th>Datum</th>
-            <th>Wagennummer</th>
-            <th>Standort</th>
-            <th>Bild</th>
-            <th>Status</th>
+            <th class="col-status">Status</th>
+            <th class="col-num">Wagennummer</th>
+            <th class="col-img">Bild</th>
+            <th class="col-loc">Standort</th>
+            <th class="col-date">Datum</th>
           </tr>
         </thead>
         <tbody id="resultsBody">
@@ -265,6 +290,7 @@
         </tbody>
       </table>
       </div>
+      <div class="scroll-hint">↔ Bei schmalem Display nach rechts wischen, um Standort und Datum zu sehen. Die Status-Spalte bleibt sichtbar.</div>
       <div class="footer" style="margin-top:12px">
         <strong>Auto-OK</strong>: 12-stellig, Prüfziffer korrekt, Länderschlüssel in Whitelist, hohe OCR-Confidence.
         <strong>Manuell-OK</strong>: Du hast die Nummer geprüft und freigegeben.
@@ -275,10 +301,11 @@
     </section>
   </main>
 
-  <!-- Lightbox -->
-  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
+  <!-- Lightbox: schwebt oben, blockiert die Eingabe darunter NICHT -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="false" aria-label="Bildvorschau">
     <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
     <img id="lightboxImg" src="" alt="">
+    <div class="lightbox-hint">Du kannst weiter unten in das Wagennummer-Feld tippen.</div>
   </div>
 
   <!-- Override-Modal -->

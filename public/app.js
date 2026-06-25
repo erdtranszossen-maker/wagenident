@@ -834,6 +834,22 @@ resetBtn.addEventListener('click', () => {
   setStatus('Zurückgesetzt.', 'ok');
 });
 
+// ---------- Feedback-Button ----------
+(() => {
+  const fb = document.getElementById('feedbackBtn');
+  if (!fb) return;
+  const to = 'j-bleich@gmx.net';
+  const subject = 'Feedback WagenIdent App';
+  const body = [
+    'Hi,',
+    '',
+    'Ich erbitte folgende Änderung in der WagenIdent App:',
+    '',
+    '',
+  ].join('\n');
+  fb.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+})();
+
 // ---------- Test-Hooks (nur für automatische Tests; in Produktion harmlos) ----------
 if (typeof window !== 'undefined') {
   // Wird ausschließlich vom E2E-Test gelesen. Schreibender Zugriff aus der UI

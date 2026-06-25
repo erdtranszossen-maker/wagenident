@@ -63,12 +63,10 @@
     th,td{text-align:left;padding:10px 8px;border-bottom:1px solid rgba(40,37,29,.08);font-size:13.5px;vertical-align:top}
     th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
     .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(40,37,29,.08);border-radius:10px;background:#fff}
-    /* Variante A: feste Spaltenbreiten, Status klebt links */
+    /* Variante A: feste Spaltenbreiten, Status scrollt normal mit */
     table.results-table{min-width:720px}
     table.results-table th.col-status,
     table.results-table td.col-status{
-      position:sticky;left:0;background:#f8fafc;z-index:2;
-      border-right:1px solid rgba(40,37,29,.08);
       min-width:96px;width:96px;
     }
     table.results-table th.col-num,
@@ -221,16 +219,7 @@
 
     <!-- Bild-Auswahl & Tipps -->
     <section class="panel">
-      <label>Bilder auswählen oder aufnehmen</label>
-      <div class="dropzone">
-        <div class="drop-actions">
-          <label class="filebtn">Aus Galerie<input id="galleryInput" type="file" accept="image/*" multiple hidden /></label>
-          <label class="filebtn" id="cameraStartLabel">Kamera (mehrere Fotos)<input id="cameraInput" type="file" accept="image/*" capture="environment" hidden /></label>
-        </div>
-        <div id="fileCount" class="hint" style="margin-top:10px">Keine Bilder ausgewählt.</div>
-      </div>
-
-      <div class="tips-box">
+      <div class="tips-box" style="margin-top:0;margin-bottom:12px">
         <h4>Tipps für bessere Erkennung</h4>
         <ul>
           <li>Die Nummer soll das Bild ausfüllen.</li>
@@ -240,6 +229,15 @@
           <li>Nichts verdecken: Schmutz, Eis oder andere Sichtbehinderungen vor dem Foto ggf. entfernen.</li>
           <li>Stillhalten: Bild scharf, nicht verwackelt — bei Bedarf zweimal auslösen.</li>
         </ul>
+      </div>
+
+      <label>Bilder auswählen oder aufnehmen</label>
+      <div class="dropzone">
+        <div class="drop-actions">
+          <label class="filebtn">Aus Galerie<input id="galleryInput" type="file" accept="image/*" multiple hidden /></label>
+          <label class="filebtn" id="cameraStartLabel">Kamera (mehrere Fotos)<input id="cameraInput" type="file" accept="image/*" capture="environment" hidden /></label>
+        </div>
+        <div id="fileCount" class="hint" style="margin-top:10px">Keine Bilder ausgewählt.</div>
       </div>
 
       <!-- Kamera-Sammeltray mit Overlay-Vorlage -->
@@ -290,7 +288,7 @@
         </tbody>
       </table>
       </div>
-      <div class="scroll-hint">↔ Bei schmalem Display nach rechts wischen, um Standort und Datum zu sehen. Die Status-Spalte bleibt sichtbar.</div>
+      <div class="scroll-hint">↔ Bei schmalem Display nach rechts wischen, um Standort und Datum zu sehen.</div>
       <div class="footer" style="margin-top:12px">
         <strong>Auto-OK</strong>: 12-stellig, Prüfziffer korrekt, Länderschlüssel in Whitelist, hohe OCR-Confidence.
         <strong>Manuell-OK</strong>: Du hast die Nummer geprüft und freigegeben.
@@ -298,6 +296,12 @@
         <strong>Blockiert</strong>: nicht eindeutig — manuelle Eingabe oder Statuswahl nötig.
         <br><span class="hint">Tipp: Auf das Bild klicken öffnet eine große Vorschau. „Details" zeigt OCR-Roh-Text und Trefferquelle. Sobald du die Wagennummer manuell änderst, fällt der OCR-Wert auf 0 %.</span>
       </div>
+    </section>
+
+    <!-- Feedback -->
+    <section class="panel" style="text-align:center">
+      <p class="hint" style="margin:0 0 10px">Verbesserungsvorschlag oder Fehler gefunden?</p>
+      <a id="feedbackBtn" class="filebtn" style="text-decoration:none;display:inline-flex" href="#">Feedback senden</a>
     </section>
   </main>
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Wagenident — UIC-Wagennummern erkennen</title>
+  <title>Wagenident — Erdtrans GmbH</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -15,148 +15,225 @@
       --ok:#2e5c10; --okbg:#e4f0db;
       --check:#a56600; --checkbg:#ffe7bf;
       --block:#b54747; --blockbg:#f9d9d9;
-      --r:16px; --r2:12px;
+      --r:14px; --r2:10px;
     }
     *{box-sizing:border-box}
-    body{margin:0;font-family:Inter,sans-serif;background:linear-gradient(180deg,#f7f6f2 0%,#ece8e1 100%);color:var(--text)}
-    .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 80px}
-    .hero,.panel{background:rgba(255,255,255,.94);border:1px solid rgba(40,37,29,.08);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.06)}
-    .hero{padding:28px}
-    .panel{padding:20px;margin-top:16px}
-    h1{margin:0 0 10px;font-size:clamp(26px,4.5vw,38px);line-height:1.1}
-    p{margin:0;color:var(--muted)}
-    .pill{display:inline-block;margin-bottom:12px;padding:8px 12px;border-radius:999px;background:var(--surface2);color:var(--muted);font-size:12px}
-    .cols{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+    body{margin:0;font-family:Inter,sans-serif;background:linear-gradient(180deg,#f7f6f2 0%,#ece8e1 100%);color:var(--text);-webkit-text-size-adjust:100%}
+    .wrap{max-width:780px;margin:0 auto;padding:16px 12px 100px}
+
+    /* Header mit Logo */
+    .brand{display:flex;justify-content:center;padding:8px 0 14px}
+    .brand img{max-width:240px;width:60%;height:auto}
+
+    .hero,.panel{background:rgba(255,255,255,.94);border:1px solid rgba(40,37,29,.08);border-radius:var(--r);box-shadow:0 6px 18px rgba(0,0,0,.05)}
+    .hero{padding:18px 18px 14px;text-align:center}
+    .panel{padding:16px;margin-top:12px}
+    h1{margin:0 0 6px;font-size:clamp(22px,5.5vw,30px);line-height:1.15}
+    p.lead{margin:0;color:var(--muted);font-size:13.5px;line-height:1.45}
+
+    /* Typische Formelemente */
     label{display:block;margin-bottom:8px;font-size:14px;font-weight:600}
-    select,input,textarea{width:100%;padding:14px;border:1px solid var(--border);border-radius:12px;font:inherit;background:#fff}
-    .dropzone{border:2px dashed rgba(1,105,111,.35);background:#e9f4f3;border-radius:var(--r);padding:18px}
+    select,input,textarea{width:100%;padding:13px 12px;border:1px solid var(--border);border-radius:12px;font:inherit;background:#fff;font-size:16px}
+    .field{margin-bottom:12px}
+    .field:last-child{margin-bottom:0}
+
+    .dropzone{border:2px dashed rgba(1,105,111,.35);background:#e9f4f3;border-radius:var(--r);padding:14px}
     .drop-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:center}
-    .filebtn{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 18px;border-radius:999px;font-weight:600;cursor:pointer;background:#fff;color:var(--text);border:1px solid rgba(40,37,29,.12)}
-    button{min-height:46px;border:none;border-radius:999px;padding:0 18px;font:inherit;font-weight:600;cursor:pointer}
+    .drop-actions.cluster{margin-top:14px}
+    .filebtn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border-radius:999px;font-weight:600;cursor:pointer;background:#fff;color:var(--text);border:1px solid rgba(40,37,29,.12);font-size:14.5px;flex:1 1 auto;min-width:140px;text-align:center}
+    button{min-height:48px;border:none;border-radius:999px;padding:0 18px;font:inherit;font-weight:600;cursor:pointer;font-size:14.5px}
     .primary{background:var(--primary);color:#fff}
     .primary:hover{background:var(--primary2)}
     .primary:disabled{background:#9ec3c5;cursor:not-allowed}
     .secondary{background:#fff;color:var(--text);border:1px solid rgba(40,37,29,.12)}
     .secondary:disabled{opacity:.5;cursor:not-allowed}
     .ghost{background:transparent;color:var(--muted)}
-    .hint,.footer,.mini{color:var(--muted);font-size:12px}
+    .small-btn{min-height:38px;padding:0 14px;font-size:13px}
+    .btn-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+    .btn-row > *{flex:1 1 auto}
+
+    .hint,.footer,.mini{color:var(--muted);font-size:12.5px;line-height:1.45}
     .status{margin-top:12px;font-size:14px;min-height:20px}
     .ok{color:var(--ok)} .err{color:var(--block)} .warn{color:var(--check)}
-    table{width:100%;border-collapse:collapse;margin-top:14px}
-    th,td{text-align:left;padding:12px 10px;border-bottom:1px solid rgba(40,37,29,.08);font-size:14px;vertical-align:top}
-    th{color:var(--muted);font-weight:600}
-    .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-    .chip{display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid rgba(40,37,29,.08);border-radius:999px;padding:8px 12px;font-size:13px}
-    .chip button{min-height:auto;padding:0 4px;background:none;color:#b0407f;border:none;font-size:16px;line-height:1}
-    .num-input{min-width:200px;font-family:'SFMono-Regular',Consolas,monospace}
-    .badge{display:inline-block;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+
+    /* Tabelle */
+    table{width:100%;border-collapse:collapse;margin-top:10px;min-width:520px}
+    th,td{text-align:left;padding:10px 8px;border-bottom:1px solid rgba(40,37,29,.08);font-size:13.5px;vertical-align:top}
+    th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+    /* Chips (Mailverteiler) */
+    .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid rgba(40,37,29,.08);border-radius:999px;padding:6px 10px 6px 12px;font-size:13px}
+    .chip button{min-height:auto;padding:0 4px;background:none;color:#b0407f;border:none;font-size:18px;line-height:1;font-weight:700}
+
+    .num-input{min-width:170px;font-family:'SFMono-Regular',Consolas,monospace;font-size:14px}
+    .badge{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
     .b-ok{background:var(--okbg);color:var(--ok)}
     .b-check{background:var(--checkbg);color:var(--check)}
     .b-block{background:var(--blockbg);color:var(--block)}
-    .reason{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4}
+    .reason{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+    .reason-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .source-pill{display:inline-block;font-size:10.5px;padding:2px 6px;border-radius:6px;background:#eef2f5;color:#446;font-weight:600}
+
     .summary{display:grid;gap:8px;grid-template-columns:repeat(3,1fr);margin-top:14px}
-    .sumcard{padding:12px;border-radius:12px;border:1px solid rgba(40,37,29,.08);text-align:center}
-    .sumcard small{display:block;color:var(--muted);font-size:11px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+    .sumcard{padding:11px 8px;border-radius:12px;border:1px solid rgba(40,37,29,.08);text-align:center}
+    .sumcard small{display:block;color:var(--muted);font-size:10.5px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
     .sumcard strong{font-size:22px}
     .sum-ok{background:var(--okbg)} .sum-check{background:var(--checkbg)} .sum-block{background:var(--blockbg)}
-    .download-panel{display:none;margin-top:16px;padding:18px;border-radius:12px;background:#f8fafb;border:1px solid rgba(40,37,29,.08)}
-    .download-link{display:inline-block;margin-top:10px;color:var(--primary);font-weight:700;text-decoration:underline}
-    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;padding:20px}
+
+    /* Modal */
+    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:14px;-webkit-overflow-scrolling:touch}
     .modal-bg.show{display:flex}
-    .modal{background:#fff;border-radius:var(--r);padding:24px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-    .modal h2{margin:0 0 12px;font-size:20px}
-    .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
-    .thumb{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border);background:#eee}
+    .modal{background:#fff;border-radius:var(--r);padding:20px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow:auto}
+    .modal h2{margin:0 0 10px;font-size:18px}
+    .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+
+    /* Thumbs & Lightbox */
+    .thumb{width:56px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);background:#eee}
     .thumb-zoom{cursor:zoom-in;transition:transform .12s ease}
     .thumb-zoom:hover{transform:scale(1.05);border-color:var(--primary)}
-    .file-cell{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
-    .file-cell .name{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .status-select{margin-top:6px;min-width:140px;padding:6px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer}
+    .file-cell{display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:var(--muted)}
+    .file-cell .name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .status-select{margin-top:6px;min-width:130px;padding:6px 8px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer}
     .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;align-items:center;justify-content:center;padding:16px}
     .lightbox.show{display:flex}
     .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
     .lightbox-close{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+    /* Tipps-Box */
     .tips-box{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff8e8;border:1px solid #f0d99e}
     .tips-box h4{margin:0 0 6px;font-size:13px;font-weight:700;color:#7a5300}
     .tips-box ul{margin:0;padding-left:18px;color:#5a4400;font-size:12.5px;line-height:1.55}
     .tips-box ul li{margin-bottom:2px}
+
+    /* Kamera-Tray + Overlay-Maske */
     .camera-tray{margin-top:12px;padding:12px;border-radius:12px;background:#eef6f6;border:1px dashed rgba(1,105,111,.3);display:none}
     .camera-tray.show{display:block}
     .camera-tray .tray-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
     .camera-tray .tray-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
     .camera-tray .tray-thumb{position:relative;width:64px;height:48px}
     .camera-tray .tray-thumb img{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
-    .camera-tray .tray-thumb button{position:absolute;top:-6px;right:-6px;min-height:auto;width:20px;height:20px;padding:0;border-radius:50%;background:#b54747;color:#fff;font-size:12px;line-height:1;border:2px solid #fff}
-    @media (max-width:760px){.cols,.summary{grid-template-columns:1fr}.hero{padding:20px}th,td{padding:10px 6px;font-size:13px}.thumb{width:48px;height:36px}.file-cell .name{max-width:90px}}
+    .camera-tray .tray-thumb button{position:absolute;top:-6px;right:-6px;min-height:auto;width:22px;height:22px;padding:0;border-radius:50%;background:#b54747;color:#fff;font-size:13px;line-height:1;border:2px solid #fff}
+
+    /* Visuelle Vorlage für Foto-Rahmen */
+    .overlay-preview{margin-top:10px;position:relative;background:#0c2530;border-radius:10px;overflow:hidden;aspect-ratio:9/16;max-width:200px}
+    .overlay-preview::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,#1a3340 0%,#16424d 50%,#1a3340 100%)}
+    .overlay-preview .mask{position:absolute;left:0;right:0;top:30%;bottom:30%;border:2px solid #ffd54a;background:rgba(255,213,74,0.08);box-shadow:0 0 0 9999px rgba(0,0,0,0.55);border-radius:4px;display:flex;align-items:center;justify-content:center;color:#ffd54a;font-size:11px;font-weight:700;letter-spacing:.5px}
+
+    /* OCR-Details */
+    .details-btn{margin-top:6px;font-size:11px;padding:4px 10px;min-height:30px;background:#eef2f5;border:1px solid rgba(40,37,29,.08);color:#446;border-radius:8px;cursor:pointer;font-weight:600}
+    .details-grid{display:grid;gap:10px;grid-template-columns:1fr;margin-top:10px}
+    .details-grid h3{margin:6px 0 4px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+    .details-grid img{max-width:100%;border-radius:8px;border:1px solid var(--border)}
+    .details-grid pre{background:#f4f4f0;border-radius:8px;padding:10px;max-height:200px;overflow:auto;font-size:11.5px;white-space:pre-wrap;word-break:break-word;margin:0}
+    .source-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+
+    /* Tabelle auf Mobile: kompakter */
+    @media (max-width:560px){
+      .wrap{padding:10px 8px 90px}
+      .hero{padding:14px}
+      h1{font-size:24px}
+      .panel{padding:14px;margin-top:10px}
+      .summary{grid-template-columns:1fr 1fr 1fr;gap:6px}
+      .sumcard{padding:9px 4px}
+      .sumcard strong{font-size:18px}
+      th,td{padding:8px 6px;font-size:12.5px}
+      .num-input{min-width:140px;font-size:13px}
+      .thumb{width:48px;height:36px}
+      .file-cell .name{max-width:90px}
+      .filebtn{min-width:120px;font-size:13.5px}
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
+    <!-- Erdtrans Logo -->
+    <div class="brand">
+      <img src="./logo-erdtrans.jpg" alt="Erdtrans GmbH" />
+    </div>
+
     <section class="hero">
-      <div class="pill">HTML-App + Vercel Serverless + Azure Vision</div>
       <h1>Wagenident</h1>
-      <p>UIC-Wagennummern aus Fotos erkennen. Auto-OK nur wenn Format, Prüfziffer und Länderschlüssel stimmen — sonst manuelle Prüfung.</p>
+      <p class="lead">UIC-Wagennummern aus Fotos erkennen. Auto-OK nur wenn Format, Prüfziffer und Länderschlüssel stimmen — sonst manuelle Prüfung.</p>
     </section>
 
-    <section class="panel cols">
-      <div>
+    <section class="panel">
+      <div class="field">
         <label for="standort">Standort</label>
         <select id="standort">
           <option value="Zossen">Zossen</option>
           <option value="Trebbin">Trebbin</option>
         </select>
-        <div class="hint" style="margin-top:8px">Wird allen neu hinzugefügten Bildern zugeordnet.</div>
-      </div>
-      <div>
-        <label for="emailInput">E-Mail-Adresse hinzufügen</label>
-        <div class="drop-actions" style="margin-top:0">
-          <input id="emailInput" type="email" placeholder="name@firma.de" />
-          <button class="secondary" id="addEmailBtn" type="button">Hinzufügen</button>
-        </div>
-        <div class="mini" style="margin-top:8px">Verteiler unten zeigt alle gespeicherten Empfänger.</div>
+        <div class="hint" style="margin-top:6px">Wird allen neu hinzugefügten Bildern zugeordnet.</div>
       </div>
     </section>
 
+    <!-- Mailverteiler-Block (E-Mail-Adresse hinzufügen + Standard-Verteiler) -->
     <section class="panel">
       <label>Mailverteiler</label>
+
+      <!-- Adresse hinzufügen -->
+      <div class="field" style="margin-top:6px">
+        <div class="drop-actions" style="margin-top:0">
+          <input id="emailInput" type="email" placeholder="name@firma.de" style="flex:2 1 220px" />
+          <button class="secondary" id="addEmailBtn" type="button" style="flex:1 1 120px">Hinzufügen</button>
+        </div>
+      </div>
+
+      <!-- Aktuelle Empfänger -->
       <div id="emailChips" class="chips"></div>
-      <div class="mini" id="emailEmpty">Noch keine Adresse gespeichert.</div>
+      <div class="mini" id="emailEmpty" style="margin-top:6px">Noch keine Adresse gespeichert.</div>
+
+      <!-- Standard-Verteiler-Buttons -->
+      <div class="btn-row" style="margin-top:14px">
+        <button class="secondary small-btn" id="loadStdBtn" type="button">Standard-Verteiler laden</button>
+        <button class="secondary small-btn" id="saveStdBtn" type="button">Aktuelle als Standard speichern</button>
+        <button class="ghost small-btn" id="clearStdBtn" type="button">Standard löschen</button>
+      </div>
+      <div class="mini" style="margin-top:8px" id="stdStatus">Kein Standard-Verteiler hinterlegt.</div>
     </section>
 
+    <!-- Bild-Auswahl & Tipps -->
     <section class="panel">
       <label>Bilder auswählen oder aufnehmen</label>
       <div class="dropzone">
         <div class="drop-actions">
           <label class="filebtn">Aus Galerie<input id="galleryInput" type="file" accept="image/*" multiple hidden /></label>
           <label class="filebtn" id="cameraStartLabel">Kamera (mehrere Fotos)<input id="cameraInput" type="file" accept="image/*" capture="environment" hidden /></label>
-          <span id="fileCount" class="hint">Keine Bilder ausgewählt.</span>
         </div>
+        <div id="fileCount" class="hint" style="margin-top:10px">Keine Bilder ausgewählt.</div>
       </div>
 
       <div class="tips-box">
         <h4>Tipps für bessere Erkennung</h4>
         <ul>
-          <li>Möglichst nah am Wagenkasten fotografieren — die Nummer soll ca. die Hälfte der Bildbreite ausfüllen.</li>
+          <li>Die Nummer soll das Bild ausfüllen.</li>
           <li>Direkt von vorne, nicht schräg — Kamera parallel zur Wagenwand halten.</li>
-          <li>Auf gute Beleuchtung achten: keinen Schatten oder direktes Gegenlicht auf der Nummer.</li>
-          <li>Nichts verdecken: Gurten, Schmutz oder Eis vor dem Foto ggf. wegwischen.</li>
+          <li>Auf gute Beleuchtung achten: keine Schatten oder Gegenlicht. Blitz bei Bedarf einschalten.</li>
+          <li>Nichts verdecken: Schmutz, Eis oder andere Sichtbehinderungen vor dem Foto ggf. entfernen.</li>
           <li>Stillhalten: Bild scharf, nicht verwackelt — bei Bedarf zweimal auslösen.</li>
           <li>Nur eine Wagennummer pro Bild — auf das richtige Schild zoomen.</li>
         </ul>
       </div>
 
-      <!-- Kamera-Sammeltray: zeigt Fotos, die nacheinander aufgenommen wurden -->
+      <!-- Kamera-Sammeltray mit Overlay-Vorlage -->
       <div class="camera-tray" id="cameraTray">
         <div class="tray-head">
-          <div><strong id="trayCount">0</strong> <span class="hint">Foto(s) aus der Kamera. Drücke „Noch eins" für jedes weitere Bild.</span></div>
+          <div><strong id="trayCount">0</strong> <span class="hint">Foto(s) aus der Kamera. „Noch eins" für jedes weitere Bild.</span></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <label class="filebtn" id="cameraAddLabel">Noch eins<input id="cameraAddInput" type="file" accept="image/*" capture="environment" hidden /></label>
-            <button class="ghost" id="cameraDoneBtn" type="button">Fertig — auswerten</button>
+            <label class="filebtn small-btn" id="cameraAddLabel">Noch eins<input id="cameraAddInput" type="file" accept="image/*" capture="environment" hidden /></label>
+            <button class="primary small-btn" id="cameraDoneBtn" type="button">Fertig — auswerten</button>
           </div>
         </div>
         <div class="tray-thumbs" id="trayThumbs"></div>
+        <div class="hint" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="overlay-preview"><div class="mask">UIC hier</div></div>
+          <div style="flex:1 1 200px">Halte die Wagennummer in den markierten Mittelbereich. Wir werten genau diesen Bereich aus — was außerhalb liegt, stört die Erkennung nicht.</div>
+        </div>
       </div>
-      <div class="drop-actions">
+
+      <div class="btn-row">
         <button class="primary" id="processBtn">Bilder auswerten</button>
         <button class="secondary" id="excelBtn" disabled>Excel herunterladen</button>
         <button class="secondary" id="mailBtn" disabled>Mail vorbereiten</button>
@@ -164,15 +241,15 @@
       </div>
       <div class="status" id="status">Bereit.</div>
       <div class="summary" id="summary" style="display:none">
-        <div class="sumcard sum-ok"><small>OK (Auto + Manuell)</small><strong id="sumOk">0</strong></div>
-        <div class="sumcard sum-check"><small>Bitte prüfen</small><strong id="sumCheck">0</strong></div>
+        <div class="sumcard sum-ok"><small>OK</small><strong id="sumOk">0</strong></div>
+        <div class="sumcard sum-check"><small>Prüfen</small><strong id="sumCheck">0</strong></div>
         <div class="sumcard sum-block"><small>Blockiert</small><strong id="sumBlock">0</strong></div>
       </div>
     </section>
 
     <section class="panel">
       <label>Erkannte Datensätze</label>
-      <div style="overflow-x:auto">
+      <div class="table-scroll">
       <table>
         <thead>
           <tr>
@@ -193,7 +270,7 @@
         <strong>Manuell-OK</strong>: Du hast die Nummer geprüft und freigegeben.
         <strong>Bitte prüfen</strong>: gültig, aber mittlere Confidence oder Mehrdeutigkeit.
         <strong>Blockiert</strong>: nicht eindeutig — manuelle Eingabe oder Statuswahl nötig.
-        <br><span class="hint">Tipp: Auf das Bild klicken öffnet eine große Vorschau. Status lässt sich über das Dropdown auf „Manuell-OK“ setzen. Sobald du die Wagennummer manuell änderst, fällt der OCR-Wert automatisch auf 0 %.</span>
+        <br><span class="hint">Tipp: Auf das Bild klicken öffnet eine große Vorschau. „Details" zeigt OCR-Roh-Text und Trefferquelle. Sobald du die Wagennummer manuell änderst, fällt der OCR-Wert auf 0 %.</span>
       </div>
     </section>
   </main>
@@ -212,6 +289,31 @@
       <div class="modal-actions">
         <button class="ghost" id="overrideCancel">Abbrechen</button>
         <button class="primary" id="overrideConfirm">Trotzdem fortfahren</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR-Details-Modal -->
+  <div class="modal-bg" id="detailsModal">
+    <div class="modal">
+      <h2>OCR-Details</h2>
+      <div class="source-row" id="detailsSource"></div>
+      <div class="details-grid">
+        <div>
+          <h3>An OCR gesendetes Bild</h3>
+          <img id="detailsImg" src="" alt="">
+        </div>
+        <div>
+          <h3>OCR-Roh-Text</h3>
+          <pre id="detailsRaw">—</pre>
+        </div>
+        <div>
+          <h3>Gefundene Zifferngruppen</h3>
+          <pre id="detailsCands">—</pre>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" id="detailsClose">Schließen</button>
       </div>
     </div>
   </div>

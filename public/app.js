@@ -1,4 +1,7 @@
-// app.js — Frontend-Logik der Wagenident-App (v2)
+// app.js — Wagenident Frontend v4
+// Neu: Auto-Crop Mittelstreifen, Azure→Google-Fallback-Auswertung,
+//       Standard-Mailverteiler (localStorage), OCR-Details-Modal,
+//       Bounding-Box-Tie-Breaker für Mittelzone.
 import { decideStatus, decideManualEntry } from './lib/uic.js';
 
 // ---------- DOM ----------
@@ -34,21 +37,42 @@ const lightbox     = $('lightbox');
 const lightboxImg  = $('lightboxImg');
 const lightboxClose= $('lightboxClose');
 
+// Standard-Verteiler
+const loadStdBtn   = $('loadStdBtn');
+const saveStdBtn   = $('saveStdBtn');
+const clearStdBtn  = $('clearStdBtn');
+const stdStatus    = $('stdStatus');
+
+// OCR-Details-Modal
+const detailsModal = $('detailsModal');
+const detailsSource= $('detailsSource');
+const detailsImg   = $('detailsImg');
+const detailsRaw   = $('detailsRaw');
+const detailsCands = $('detailsCands');
+const detailsClose = $('detailsClose');
+
+// ---------- Konstanten ----------
+const STORAGE_BASE  = 'wagenident.v1';
+const STORAGE_STD   = 'wagenident.std.emails';
+const CROP_TOP      = 0.30;   // 30–70 % Mittelstreifen
+const CROP_BOTTOM   = 0.70;
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;  // 4 MB
+const JPEG_Q_DEFAULT = 0.92;
+const JPEG_Q_FALLBACK = [0.85, 0.78, 0.7, 0.6, 0.5];
+
 // ---------- State ----------
-// status-Werte intern: 'auto_ok' | 'manual_ok' | 'check' | 'blocked'
-// 'auto_ok' + 'manual_ok' = grün (OK)
 const STATE = {
   rows: [],
   emails: [],
   selectedFiles: [],
-  cameraFiles: [],          // gesammelte Kamera-Aufnahmen (mehrere nacheinander)
+  cameraFiles: [],
   overrideCallback: null
 };
 
 // ---------- Persistence ----------
 function loadPersist() {
   try {
-    const raw = localStorage.getItem('wagenident.v1');
+    const raw = localStorage.getItem(STORAGE_BASE);
     if (raw) {
       const o = JSON.parse(raw);
       STATE.emails = Array.isArray(o.emails) ? o.emails : [];
@@ -58,10 +82,36 @@ function loadPersist() {
 }
 function savePersist() {
   try {
-    localStorage.setItem('wagenident.v1', JSON.stringify({
+    localStorage.setItem(STORAGE_BASE, JSON.stringify({
       emails: STATE.emails, standort: standortEl.value
     }));
   } catch {}
+}
+function getStandardEmails() {
+  try {
+    const raw = localStorage.getItem(STORAGE_STD);
+    if (!raw) return null;
+    const a = JSON.parse(raw);
+    return Array.isArray(a) ? a : null;
+  } catch { return null; }
+}
+function setStandardEmails(list) {
+  try { localStorage.setItem(STORAGE_STD, JSON.stringify(list)); } catch {}
+}
+function clearStandardEmails() {
+  try { localStorage.removeItem(STORAGE_STD); } catch {}
+}
+function updateStdStatus() {
+  const std = getStandardEmails();
+  if (!std || std.length === 0) {
+    stdStatus.textContent = 'Kein Standard-Verteiler hinterlegt.';
+    loadStdBtn.disabled = true;
+    clearStdBtn.disabled = true;
+  } else {
+    stdStatus.textContent = `Standard-Verteiler: ${std.length} Adresse${std.length===1?'':'n'} (${std.slice(0,2).join(', ')}${std.length>2?' …':''}).`;
+    loadStdBtn.disabled = false;
+    clearStdBtn.disabled = false;
+  }
 }
 
 // ---------- Helpers ----------
@@ -73,6 +123,9 @@ const validEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 const setStatus = (html, cls) => { statusEl.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; };
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fileCountLabel(n) {
+  return n === 0 ? 'Keine Bilder ausgewählt.' : `${n} Bild${n===1?'':'er'} ausgewählt`;
 }
 
 // ---------- E-Mail-Verteiler ----------
@@ -99,12 +152,33 @@ addEmailBtn.addEventListener('click', () => {
 emailInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addEmailBtn.click(); } });
 standortEl.addEventListener('change', savePersist);
 
+// Standard-Verteiler
+loadStdBtn.addEventListener('click', () => {
+  const std = getStandardEmails();
+  if (!std || !std.length) { setStatus('Kein Standard-Verteiler vorhanden.', 'err'); return; }
+  // Merge: doppelte vermeiden
+  let added = 0;
+  std.forEach(m => { if (!STATE.emails.includes(m)) { STATE.emails.push(m); added++; } });
+  savePersist();
+  renderEmails();
+  setStatus(`Standard-Verteiler geladen — ${added} neue Adresse${added===1?'':'n'} übernommen.`, 'ok');
+});
+saveStdBtn.addEventListener('click', () => {
+  if (!STATE.emails.length) { setStatus('Verteiler ist leer — kein Standard speicherbar.', 'err'); return; }
+  setStandardEmails(STATE.emails.slice());
+  updateStdStatus();
+  setStatus(`Standard-Verteiler gespeichert (${STATE.emails.length} Adresse${STATE.emails.length===1?'':'n'}).`, 'ok');
+});
+clearStdBtn.addEventListener('click', () => {
+  clearStandardEmails();
+  updateStdStatus();
+  setStatus('Standard-Verteiler gelöscht.', 'ok');
+});
+
 // ---------- File-Auswahl ----------
 function refreshFileCount() {
   STATE.selectedFiles = collectSelectedFiles();
-  fileCount.textContent = STATE.selectedFiles.length
-    ? `${STATE.selectedFiles.length} Bild${STATE.selectedFiles.length===1?'':'er'} ausgewählt`
-    : 'Keine Bilder ausgewählt.';
+  fileCount.textContent = fileCountLabel(STATE.selectedFiles.length);
 }
 function collectSelectedFiles() {
   const map = new Map();
@@ -118,12 +192,9 @@ function collectSelectedFiles() {
 }
 galleryInput.addEventListener('change', refreshFileCount);
 
-// ---------- Kamera-Sammelmodus (mehrere Fotos vor Auswertung) ----------
-// Logik: Erstes Foto über #cameraInput, jedes weitere über #cameraAddInput.
-// Jedes neue Bild landet in STATE.cameraFiles und erscheint im Tray.
+// ---------- Kamera-Sammelmodus ----------
 async function addCameraFile(file) {
   if (!file) return;
-  // Vorschau (kleiner Thumbnail) erzeugen
   let thumbUrl = '';
   try {
     const bm = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -134,7 +205,6 @@ async function addCameraFile(file) {
     if (bm.close) bm.close();
     thumbUrl = c.toDataURL('image/jpeg', 0.7);
   } catch {}
-  // Eindeutigen Namen vergeben (iOS schickt teils gleichen Dateinamen für jede Aufnahme)
   const ts = Date.now();
   const ext = (file.name.match(/\.[a-z0-9]+$/i) || ['.jpg'])[0];
   const safe = new File([file], `kamera_${ts}${ext}`, { type: file.type || 'image/jpeg', lastModified: ts });
@@ -142,7 +212,6 @@ async function addCameraFile(file) {
   renderCameraTray();
   refreshFileCount();
 }
-
 function renderCameraTray() {
   const n = STATE.cameraFiles.length;
   trayCount.textContent = String(n);
@@ -158,11 +227,10 @@ function renderCameraTray() {
     refreshFileCount();
   }));
 }
-
 cameraInput.addEventListener('change', async () => {
   const f = cameraInput.files && cameraInput.files[0];
   if (f) await addCameraFile(f);
-  cameraInput.value = '';  // Reset, damit dasselbe Bild erneut ausgewählt werden könnte
+  cameraInput.value = '';
 });
 cameraAddInput.addEventListener('change', async () => {
   const f = cameraAddInput.files && cameraAddInput.files[0];
@@ -171,45 +239,82 @@ cameraAddInput.addEventListener('change', async () => {
 });
 cameraDoneBtn.addEventListener('click', () => {
   if (STATE.cameraFiles.length === 0) { setStatus('Noch keine Kamera-Aufnahmen.', 'err'); return; }
-  // Tray einklappen und direkt Auswertung starten
   processBtn.click();
 });
 
-// ---------- Bildvorverarbeitung ----------
-// Liefert: { blob (für OCR-Upload), thumbDataUrl (Tabellen-Thumbnail), fullDataUrl (Lightbox) }
+// ---------- Bildverarbeitung ----------
+// Liest die Datei in ein ImageBitmap mit korrekter EXIF-Orientierung.
+async function loadBitmap(file) {
+  try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch { return await createImageBitmap(file); }
+}
+
+// Zeichnet bitmap auf ein neues Canvas (vollformat, 1:1).
+function bitmapToCanvas(bitmap) {
+  const c = document.createElement('canvas');
+  c.width = bitmap.width; c.height = bitmap.height;
+  c.getContext('2d').drawImage(bitmap, 0, 0);
+  return c;
+}
+
+// Crop des Mittelstreifens (vertikal 30–70 %). Liefert ein neues Canvas.
+function cropMiddle(srcCanvas) {
+  const h = srcCanvas.height;
+  const y0 = Math.round(h * CROP_TOP);
+  const y1 = Math.round(h * CROP_BOTTOM);
+  const ch = Math.max(1, y1 - y0);
+  const cw = srcCanvas.width;
+  const out = document.createElement('canvas');
+  out.width = cw; out.height = ch;
+  out.getContext('2d').drawImage(srcCanvas, 0, y0, cw, ch, 0, 0, cw, ch);
+  return out;
+}
+
+// Canvas → JPEG-Blob mit progressiver Qualitätsreduktion, falls > 4 MB.
+async function canvasToJpegBlob(canvas, qStart = JPEG_Q_DEFAULT) {
+  const tryEncode = (q) => new Promise(r => canvas.toBlob(r, 'image/jpeg', q));
+  let blob = await tryEncode(qStart);
+  if (!blob) return null;
+  if (blob.size <= MAX_UPLOAD_BYTES) return blob;
+  for (const q of JPEG_Q_FALLBACK) {
+    blob = await tryEncode(q);
+    if (blob && blob.size <= MAX_UPLOAD_BYTES) return blob;
+  }
+  return blob; // letzter Versuch, evtl. immer noch zu groß
+}
+
+// Canvas → DataURL für UI (klein, für Modal-Vorschau).
+function canvasToDataUrl(canvas, maxLong = 900, q = 0.82) {
+  const w = canvas.width, h = canvas.height;
+  const s = Math.min(1, maxLong / Math.max(w, h));
+  if (s >= 1) return canvas.toDataURL('image/jpeg', q);
+  const small = document.createElement('canvas');
+  small.width = Math.round(w * s); small.height = Math.round(h * s);
+  small.getContext('2d').drawImage(canvas, 0, 0, small.width, small.height);
+  return small.toDataURL('image/jpeg', q);
+}
+
+// Komplette Bildvorbereitung:
+// → fullCanvas (Originalformat, 1:1), cropCanvas (Mittelstreifen),
+//   thumbDataUrl (Tabelle), fullDataUrl (Lightbox), cropDataUrl (Details-Modal)
 async function preprocessImage(file) {
-  let bitmap;
-  try { bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
-  catch { bitmap = await createImageBitmap(file); }
-
-  const MAX_LONG = 1600;
-  const scale = Math.min(1, MAX_LONG / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+  const bitmap = await loadBitmap(file);
+  const fullCanvas = bitmapToCanvas(bitmap);
+  const cropCanvas = cropMiddle(fullCanvas);
   if (bitmap.close) bitmap.close();
 
-  // Großvorschau (z.B. max 1200px Längskante) für die Lightbox
-  const fullCanvas = document.createElement('canvas');
-  const fScale = Math.min(1, 1200 / Math.max(w, h));
-  fullCanvas.width = Math.round(w * fScale);
-  fullCanvas.height = Math.round(h * fScale);
-  fullCanvas.getContext('2d').drawImage(canvas, 0, 0, fullCanvas.width, fullCanvas.height);
-  const fullDataUrl = fullCanvas.toDataURL('image/jpeg', 0.82);
-
-  // Tabellen-Thumb klein
+  // Thumbnail klein
   const thumbCanvas = document.createElement('canvas');
-  const tScale = Math.min(1, 96 / Math.max(w, h));
-  thumbCanvas.width = Math.round(w * tScale);
-  thumbCanvas.height = Math.round(h * tScale);
-  thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+  const tScale = Math.min(1, 96 / Math.max(fullCanvas.width, fullCanvas.height));
+  thumbCanvas.width = Math.max(1, Math.round(fullCanvas.width * tScale));
+  thumbCanvas.height = Math.max(1, Math.round(fullCanvas.height * tScale));
+  thumbCanvas.getContext('2d').drawImage(fullCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
   const thumbDataUrl = thumbCanvas.toDataURL('image/jpeg', 0.7);
 
-  const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
-  return { blob, thumbDataUrl, fullDataUrl };
+  const fullDataUrl = canvasToDataUrl(fullCanvas, 1400, 0.82);
+  const cropDataUrl = canvasToDataUrl(cropCanvas, 1400, 0.85);
+
+  return { fullCanvas, cropCanvas, thumbDataUrl, fullDataUrl, cropDataUrl };
 }
 
 // ---------- API ----------
@@ -224,47 +329,139 @@ async function callOcr(blob) {
   return data;
 }
 
-// ---------- Verarbeitung ----------
+// ---------- Tie-Breaker für Bounding-Box-Mittelzone ----------
+// Eingabe: rohe candidate-Liste mit { digits, raw, vision_confidence, y_mid }.
+// Wenn y_mid bekannt ist und die Mehrheit der Bilder im Crop bei 0.3–0.7 lag,
+// präferieren wir Kandidaten mit y_mid in der Mitte des Crops.
+// Wir geben die sortierte Liste zurück: zentrale Kandidaten zuerst.
+function sortCandidatesByCenterPreference(candidates, imageHeight) {
+  if (!candidates || candidates.length < 2) return candidates || [];
+  if (!imageHeight || imageHeight <= 0) return candidates;
+  const centerLow = imageHeight * 0.35;
+  const centerHigh = imageHeight * 0.65;
+  const scored = candidates.map(c => {
+    const yMid = (typeof c.y_mid === 'number') ? c.y_mid : null;
+    let inCenter = 0;
+    if (yMid != null) {
+      inCenter = (yMid >= centerLow && yMid <= centerHigh) ? 1 : 0;
+    }
+    return { c, inCenter, conf: c.vision_confidence ?? 0 };
+  });
+  scored.sort((a, b) => (b.inCenter - a.inCenter) || (b.conf - a.conf));
+  return scored.map(s => s.c);
+}
+
+// ---------- Verarbeitung pro Bild ----------
 async function processOne(file, idx, total) {
   const id = crypto.randomUUID();
   setStatus(`Verarbeite Bild ${idx+1} von ${total}: ${escapeHtml(file.name)}`);
-  let thumbDataUrl = '', fullDataUrl = '';
-  try {
-    const { blob, thumbDataUrl: t, fullDataUrl: f } = await preprocessImage(file);
-    thumbDataUrl = t; fullDataUrl = f;
-    const data = await callOcr(blob);
-    const decision = decideStatus(
-      (data.candidates || []).map(c => ({ digits: c.digits, confidence: c.vision_confidence }))
-    );
-    return makeRow(id, decision, file.name, thumbDataUrl, fullDataUrl);
-  } catch (e) {
-    return {
-      id, datum: today(),
-      digits: null, formatted: null,
-      status: 'blocked',
-      reasons: [`Fehler: ${e.message || e}`],
-      confidence: null, country: null,
-      standort: standortEl.value,
-      fileName: file.name,
-      thumbDataUrl, fullDataUrl,
-      manualEdited: false
-    };
-  }
-}
 
-function makeRow(id, decision, fileName, thumbDataUrl, fullDataUrl) {
+  let prepared;
+  try { prepared = await preprocessImage(file); }
+  catch (e) {
+    return blockedRow(id, file.name, `Bild konnte nicht gelesen werden: ${e.message || e}`);
+  }
+  const { fullCanvas, cropCanvas, thumbDataUrl, fullDataUrl, cropDataUrl } = prepared;
+
+  // Versuch 1: Crop senden (Mittelstreifen)
+  let usedStrategy = 'crop';
+  let usedImageDataUrl = cropDataUrl;
+  let ocrData = null;
+  let cropError = null;
+
+  try {
+    const cropBlob = await canvasToJpegBlob(cropCanvas, JPEG_Q_DEFAULT);
+    if (!cropBlob) throw new Error('CROP_ENCODE_FAILED');
+    ocrData = await callOcr(cropBlob);
+  } catch (e) { cropError = e; }
+
+  const cropHadHit = ocrData && Array.isArray(ocrData.candidates) && ocrData.candidates.length > 0;
+
+  // Versuch 2: Wenn Crop nichts brachte → Vollbild senden
+  if (!cropHadHit) {
+    try {
+      const fullBlob = await canvasToJpegBlob(fullCanvas, JPEG_Q_DEFAULT);
+      if (!fullBlob) throw new Error('FULL_ENCODE_FAILED');
+      const fullData = await callOcr(fullBlob);
+      if (fullData && Array.isArray(fullData.candidates) && fullData.candidates.length > 0) {
+        ocrData = fullData;
+        usedStrategy = 'full';
+        usedImageDataUrl = fullDataUrl;
+      } else if (!ocrData) {
+        // Crop war Fehler, Vollbild liefert wenigstens leeres ok-Result
+        ocrData = fullData;
+        usedStrategy = 'full';
+        usedImageDataUrl = fullDataUrl;
+      }
+    } catch (e) {
+      if (!ocrData) {
+        return blockedRow(id, file.name, `OCR-Fehler: ${e.message || e}`, {
+          thumbDataUrl, fullDataUrl, cropDataUrl,
+          attempts: [], source: null, usedStrategy: 'full', usedImageDataUrl: fullDataUrl
+        });
+      }
+    }
+  }
+
+  // OCR-Daten auswerten
+  const sortedCands = sortCandidatesByCenterPreference(
+    ocrData.candidates || [],
+    usedStrategy === 'crop' ? cropCanvas.height : fullCanvas.height
+  );
+  const decisionInput = sortedCands.map(c => ({ digits: c.digits, confidence: c.vision_confidence }));
+  const decision = decideStatus(decisionInput);
+
+  const sourcePill = buildSourcePillLabel(ocrData.source, usedStrategy);
+
   return {
     id, datum: today(),
-    digits: decision.digits,
-    formatted: decision.formatted,
-    status: decision.status,
-    reasons: decision.reasons || [],
-    confidence: decision.confidence,
-    country: decision.country,
+    digits: decision.digits, formatted: decision.formatted,
+    status: decision.status, reasons: decision.reasons || [],
+    confidence: decision.confidence, country: decision.country,
     standort: standortEl.value,
-    fileName, thumbDataUrl, fullDataUrl,
-    manualEdited: false
+    fileName: file.name,
+    thumbDataUrl, fullDataUrl, cropDataUrl,
+    manualEdited: false,
+    // Diagnose
+    sourcePill,
+    ocrSource: ocrData.source || null,
+    usedStrategy,
+    usedImageDataUrl,
+    rawText: ocrData.full_text_excerpt || '',
+    candidates: sortedCands,
+    attempts: ocrData.attempts || []
   };
+}
+
+function blockedRow(id, fileName, reason, extra = {}) {
+  return {
+    id, datum: today(),
+    digits: null, formatted: null,
+    status: 'blocked',
+    reasons: [reason],
+    confidence: null, country: null,
+    standort: standortEl.value,
+    fileName,
+    thumbDataUrl: extra.thumbDataUrl || '',
+    fullDataUrl: extra.fullDataUrl || '',
+    cropDataUrl: extra.cropDataUrl || '',
+    manualEdited: false,
+    sourcePill: null,
+    ocrSource: null,
+    usedStrategy: extra.usedStrategy || null,
+    usedImageDataUrl: extra.usedImageDataUrl || '',
+    rawText: '',
+    candidates: [],
+    attempts: extra.attempts || []
+  };
+}
+
+function buildSourcePillLabel(source, strategy) {
+  if (source === 'google') return 'Google Vision';
+  if (source === 'azure') {
+    return strategy === 'crop' ? 'Azure (Crop)' : 'Azure (Vollbild)';
+  }
+  return null;
 }
 
 // ---------- Status-Labels ----------
@@ -276,7 +473,7 @@ const STATUS_LABEL = {
 };
 const STATUS_CLASS = {
   auto_ok:   'b-ok',
-  manual_ok: 'b-ok',     // gemeinsame grüne Kategorie
+  manual_ok: 'b-ok',
   check:     'b-check',
   blocked:   'b-block'
 };
@@ -284,10 +481,6 @@ function isOk(status) { return status === 'auto_ok' || status === 'manual_ok'; }
 
 // ---------- Render-Tabelle ----------
 function statusDropdown(row) {
-  // Auto-OK ist KEINE manuell wählbare Option (wird vom System gesetzt).
-  // Wenn die Zeile aktuell Auto-OK ist, zeigen wir das als (gesperrten) Eintrag an,
-  // damit der Status sichtbar bleibt — der Nutzer kann auf Manuell-OK, Bitte prüfen
-  // oder Blockiert wechseln.
   const opts = [];
   if (row.status === 'auto_ok') {
     opts.push({ v: 'auto_ok', t: 'Auto-OK (automatisch)', disabled: true });
@@ -312,6 +505,12 @@ function renderRows() {
     const val = r.formatted || r.digits || '';
     const reason = r.reasons && r.reasons.length ? `<div class="reason">${escapeHtml(r.reasons.join(' · '))}</div>` : '';
     const country = r.country ? `<div class="reason">${escapeHtml(r.country)}${r.confidence!=null?` · OCR ${(r.confidence*100).toFixed(0)}%`:''}</div>` : '';
+    const sourcePill = r.sourcePill ? `<span class="source-pill">${escapeHtml(r.sourcePill)}</span>` : '';
+    const detailsBtn = (r.rawText || r.candidates?.length || r.attempts?.length || r.usedImageDataUrl)
+      ? `<button type="button" class="details-btn" data-id="${r.id}">OCR-Details</button>` : '';
+    const reasonRow = (sourcePill || detailsBtn)
+      ? `<div class="reason-row" style="margin-top:6px">${sourcePill}${detailsBtn}</div>` : '';
+
     const thumb = r.thumbDataUrl
       ? `<img class="thumb thumb-zoom" data-id="${r.id}" src="${r.thumbDataUrl}" alt="Bild vergrößern" title="Bild vergrößern">`
       : '<div class="thumb"></div>';
@@ -323,6 +522,7 @@ function renderRows() {
           <input class="num-input" data-id="${r.id}" value="${escapeHtml(val)}" placeholder="manuell eingeben" inputmode="numeric" />
           ${reason}
           ${country}
+          ${reasonRow}
         </td>
         <td>${escapeHtml(r.standort)}</td>
         <td><div class="file-cell">${thumb}<span class="name" title="${escapeHtml(r.fileName)}">${escapeHtml(r.fileName)}</span></div></td>
@@ -333,7 +533,7 @@ function renderRows() {
       </tr>`;
   }).join('');
 
-  // Wagennummer-Edit (Re-Validierung)
+  // Wagennummer-Edit
   resultsBody.querySelectorAll('input.num-input').forEach(inp => {
     inp.addEventListener('change', () => {
       const row = STATE.rows.find(x => x.id === inp.dataset.id);
@@ -341,12 +541,9 @@ function renderRows() {
       const decision = decideManualEntry(inp.value);
       row.digits = decision.digits;
       row.formatted = decision.formatted;
-      // Manuell geänderte Nummer => niemals Auto-OK. Wenn die Validierung
-      // 'auto_ok' liefern würde, behandeln wir es als 'manual_ok'.
       row.status = decision.status === 'auto_ok' ? 'manual_ok' : decision.status;
       row.reasons = decision.reasons;
       row.country = decision.country;
-      // OCR-Konfidenz auf 0 setzen — die Nummer kommt jetzt vom Menschen, nicht aus dem OCR.
       row.confidence = 0;
       row.manualEdited = true;
       renderRows();
@@ -360,14 +557,9 @@ function renderRows() {
     sel.addEventListener('change', () => {
       const row = STATE.rows.find(x => x.id === sel.dataset.id);
       if (!row) return;
-      const newStatus = sel.value;
-      // auto_ok kann der Mensch nicht "erzwingen" — wenn das Dropdown auto_ok zeigt
-      // und der Code das nicht hergibt, hatten wir die Option disabled. Wenn der
-      // User explizit 'manual_ok' wählt, vermerken wir das.
-      row.status = newStatus;
-      if (newStatus === 'manual_ok') {
+      row.status = sel.value;
+      if (sel.value === 'manual_ok') {
         row.manualEdited = true;
-        // Reasons leeren, da der Mensch entschieden hat
         row.reasons = ['Manuell freigegeben'];
       }
       renderRows();
@@ -376,12 +568,20 @@ function renderRows() {
     });
   });
 
-  // Thumbnails -> Lightbox
+  // Thumbnails → Lightbox
   resultsBody.querySelectorAll('img.thumb-zoom').forEach(img => {
     img.addEventListener('click', () => {
       const row = STATE.rows.find(x => x.id === img.dataset.id);
       if (!row) return;
       openLightbox(row.fullDataUrl || row.thumbDataUrl, row.fileName);
+    });
+  });
+
+  // Details-Buttons
+  resultsBody.querySelectorAll('button.details-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = STATE.rows.find(x => x.id === btn.dataset.id);
+      if (row) openDetails(row);
     });
   });
 
@@ -396,7 +596,6 @@ function updateSummary() {
   summary.style.display = STATE.rows.length ? 'grid' : 'none';
   return { ok, ck, bl };
 }
-
 function updateExportGates() {
   const hasRows = STATE.rows.length > 0;
   excelBtn.disabled = !hasRows;
@@ -417,7 +616,44 @@ function closeLightbox() {
 }
 lightboxClose.addEventListener('click', closeLightbox);
 lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeLightbox(); closeDetails(); } });
+
+// ---------- OCR-Details-Modal ----------
+function openDetails(row) {
+  // Source-Pills: bevorzugt finale Auswahl + alle Versuche
+  const pills = [];
+  if (row.sourcePill) pills.push(`<span class="source-pill">Aktiv: ${escapeHtml(row.sourcePill)}</span>`);
+  (row.attempts || []).forEach(a => {
+    const ok = a.ok ? '✓' : '✗';
+    const label = `${a.source === 'azure' ? 'Azure' : 'Google'} ${ok}${a.error?.code ? ` (${a.error.code})` : ''}${typeof a.candidates?.length === 'number' ? ` · ${a.candidates.length} Treffer` : ''}`;
+    pills.push(`<span class="source-pill">${escapeHtml(label)}</span>`);
+  });
+  detailsSource.innerHTML = pills.join(' ');
+
+  detailsImg.src = row.usedImageDataUrl || row.cropDataUrl || row.fullDataUrl || '';
+  detailsImg.alt = row.fileName || '';
+
+  detailsRaw.textContent = row.rawText && row.rawText.trim()
+    ? row.rawText
+    : '— (kein Roh-Text vom OCR vorhanden)';
+
+  if (row.candidates && row.candidates.length) {
+    const lines = row.candidates.map((c, i) => {
+      const conf = c.vision_confidence != null ? `${(c.vision_confidence*100).toFixed(0)}%` : '—';
+      const y = c.y_mid != null ? `y≈${Math.round(c.y_mid)}` : '';
+      return `${i+1}. ${c.digits || '(?)'} — Roh: ${c.raw || ''} — OCR: ${conf} ${y}`;
+    });
+    detailsCands.textContent = lines.join('\n');
+  } else {
+    detailsCands.textContent = '— (keine Zifferngruppen gefunden)';
+  }
+  detailsModal.classList.add('show');
+}
+function closeDetails() {
+  detailsModal.classList.remove('show');
+}
+detailsClose.addEventListener('click', closeDetails);
+detailsModal.addEventListener('click', (e) => { if (e.target === detailsModal) closeDetails(); });
 
 // ---------- Auswertung ----------
 processBtn.addEventListener('click', async () => {
@@ -430,7 +666,6 @@ processBtn.addEventListener('click', async () => {
     STATE.rows.push(row);
     renderRows();
   }
-  // Nach erfolgreicher Auswertung: Kamera-Tray leeren, damit die nächste Session frisch startet.
   STATE.cameraFiles = [];
   renderCameraTray();
   galleryInput.value = '';
@@ -441,7 +676,7 @@ processBtn.addEventListener('click', async () => {
   updateExportGates();
 });
 
-// ---------- Excel-Export (zuverlässiger Direkt-Download) ----------
+// ---------- Excel-Export ----------
 function buildWorkbook() {
   const data = STATE.rows.map(r => ({
     Datum: r.datum,
@@ -451,25 +686,23 @@ function buildWorkbook() {
     Status: STATUS_LABEL[r.status] || r.status,
     Land: r.country || '',
     'OCR-Confidence': r.confidence != null ? Math.round(r.confidence*100) + '%' : '',
+    'OCR-Quelle': r.sourcePill || '',
     Hinweise: (r.reasons||[]).join(' · '),
     'Manuell bearbeitet': r.manualEdited ? 'Ja' : 'Nein'
   }));
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:12},{wch:22},{wch:12},{wch:30},{wch:14},{wch:14},{wch:14},{wch:40},{wch:18}];
+  ws['!cols'] = [{wch:12},{wch:22},{wch:12},{wch:30},{wch:14},{wch:14},{wch:14},{wch:16},{wch:40},{wch:18}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Wagennummern');
   return wb;
 }
-
 function triggerDownload() {
   const wb = buildWorkbook();
   const filename = `wagennummern_${standortEl.value}_${today()}.xlsx`;
-  // SheetJS hat einen eingebauten Browser-Save, der iOS/Safari korrekt behandelt
   try {
     XLSX.writeFile(wb, filename, { compression: true });
     setStatus(`Excel-Datei „${filename}" gespeichert.`, 'ok');
   } catch (e) {
-    // Fallback: Blob + temporären Link, der per Code geklickt wird
     const out = XLSX.write(wb, { bookType:'xlsx', type:'array', compression: true });
     const blob = new Blob([out], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -481,7 +714,6 @@ function triggerDownload() {
     setStatus(`Excel-Datei „${filename}" wird heruntergeladen.`, 'ok');
   }
 }
-
 function withBlockedGuard(action, kind) {
   const blocked = STATE.rows.filter(r => r.status === 'blocked').length;
   if (blocked === 0) { action(); return; }
@@ -495,9 +727,9 @@ overrideConfirm.addEventListener('click', () => {
   const cb = STATE.overrideCallback; STATE.overrideCallback = null;
   if (cb) cb();
 });
-
 excelBtn.addEventListener('click', () => withBlockedGuard(triggerDownload, 'Excel-Export'));
 
+// ---------- Mail ----------
 mailBtn.addEventListener('click', () => withBlockedGuard(() => {
   if (!STATE.emails.length) { setStatus('Bitte mindestens eine E-Mail-Adresse hinzufügen.', 'err'); return; }
   const to = STATE.emails.join(',');
@@ -516,6 +748,7 @@ mailBtn.addEventListener('click', () => withBlockedGuard(() => {
   setStatus('Mail-Entwurf wurde vorbereitet.', 'ok');
 }, 'Mail-Versand'));
 
+// ---------- Reset ----------
 resetBtn.addEventListener('click', () => {
   STATE.rows = [];
   STATE.selectedFiles = [];
@@ -535,3 +768,4 @@ loadPersist();
 renderEmails();
 renderRows();
 refreshFileCount();
+updateStdStatus();

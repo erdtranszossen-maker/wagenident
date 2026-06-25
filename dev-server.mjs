@@ -1,5 +1,5 @@
 // Lokaler Entwicklungs-Server: serviert /public statisch und routet /api/ocr an die Function.
-// Azure wird gemockt, wenn AZURE_VISION_KEY nicht gesetzt ist.
+// Azure und Google werden gemockt, wenn keine Keys gesetzt sind.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,16 +10,27 @@ const PUBLIC = path.join(__dirname, 'public');
 const PORT = process.env.PORT || 3000;
 const USE_MOCK = !process.env.AZURE_VISION_KEY;
 
-// Mock Azure für lokales Testen
+// Mock Azure + Google für lokales Testen
 if (USE_MOCK) {
   process.env.AZURE_VISION_KEY = 'mock-key';
   process.env.AZURE_VISION_ENDPOINT = 'https://mock.cognitiveservices.azure.com';
+  // Wenn der Tester GOOGLE_VISION_API_KEY nicht setzt, verwenden wir einen Mock-Key,
+  // damit die Fallback-Kette getestet werden kann.
+  if (!process.env.GOOGLE_VISION_API_KEY) process.env.GOOGLE_VISION_API_KEY = 'mock-google-key';
+
+  // Steuerung über Bildgröße (Body-Länge) für Tests:
+  //  - >  200 Byte: Azure liefert valide UIC
+  //  - <= 200 Byte: Azure leer → Google liefert UIC (Fallback-Test)
+  //  - body enthält ASCII-Marker "NOAZURE"  -> Azure leer
+  //  - body enthält ASCII-Marker "NOGOOGLE" -> Google leer
   const origFetch = global.fetch;
   global.fetch = async (url, init) => {
     if (typeof url === 'string' && url.includes('imageanalysis:analyze')) {
-      // Body ist ein Buffer (Azure erwartet Binary). Größe approximiert „Bild vorhanden".
-      const bodyLen = init && init.body ? (init.body.length || (init.body.byteLength || 0)) : 0;
-      const text = bodyLen > 200 ? '31 81 6650 286-0' : '';
+      const body = init && init.body;
+      const bodyLen = body ? (body.length || body.byteLength || 0) : 0;
+      const bodyStr = body && body.toString ? body.toString('latin1') : '';
+      const azureBlocked = bodyStr.includes('NOAZURE') || bodyLen <= 200;
+      const text = azureBlocked ? '' : '31 81 6650 286-0';
       const lines = text ? [{
         text,
         words: text.split(/\s+/).map((w, i) => ({
@@ -40,6 +51,25 @@ if (USE_MOCK) {
           styles: [],
           blocks: text ? [{ lines }] : []
         }
+      };
+      return { ok: true, status: 200, json: async () => mock, text: async () => JSON.stringify(mock) };
+    }
+    if (typeof url === 'string' && url.includes('vision.googleapis.com')) {
+      const body = init && init.body;
+      const bodyStr = typeof body === 'string' ? body : '';
+      const googleBlocked = bodyStr.includes('NOGOOGLE');
+      const text = googleBlocked ? '' : '31 81 6650 286-0';
+      const mock = {
+        responses: [text ? {
+          fullTextAnnotation: { text },
+          textAnnotations: [
+            { description: text, boundingPoly: { vertices: [{x:0,y:50},{x:300,y:50},{x:300,y:80},{x:0,y:80}] } },
+            ...text.split(/\s+/).map((w,i) => ({
+              description: w,
+              boundingPoly: { vertices: [{x:i*40,y:55},{x:i*40+30,y:55},{x:i*40+30,y:75},{x:i*40,y:75}] }
+            }))
+          ]
+        } : {}]
       };
       return { ok: true, status: 200, json: async () => mock, text: async () => JSON.stringify(mock) };
     }

@@ -76,13 +76,24 @@
     .lightbox.show{display:flex}
     .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
     .lightbox-close{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .tips-box{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff8e8;border:1px solid #f0d99e}
+    .tips-box h4{margin:0 0 6px;font-size:13px;font-weight:700;color:#7a5300}
+    .tips-box ul{margin:0;padding-left:18px;color:#5a4400;font-size:12.5px;line-height:1.55}
+    .tips-box ul li{margin-bottom:2px}
+    .camera-tray{margin-top:12px;padding:12px;border-radius:12px;background:#eef6f6;border:1px dashed rgba(1,105,111,.3);display:none}
+    .camera-tray.show{display:block}
+    .camera-tray .tray-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .camera-tray .tray-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .camera-tray .tray-thumb{position:relative;width:64px;height:48px}
+    .camera-tray .tray-thumb img{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+    .camera-tray .tray-thumb button{position:absolute;top:-6px;right:-6px;min-height:auto;width:20px;height:20px;padding:0;border-radius:50%;background:#b54747;color:#fff;font-size:12px;line-height:1;border:2px solid #fff}
     @media (max-width:760px){.cols,.summary{grid-template-columns:1fr}.hero{padding:20px}th,td{padding:10px 6px;font-size:13px}.thumb{width:48px;height:36px}.file-cell .name{max-width:90px}}
   </style>
 </head>
 <body>
   <main class="wrap">
     <section class="hero">
-      <div class="pill">HTML-App + Vercel Serverless + Google Vision</div>
+      <div class="pill">HTML-App + Vercel Serverless + Azure Vision</div>
       <h1>Wagenident</h1>
       <p>UIC-Wagennummern aus Fotos erkennen. Auto-OK nur wenn Format, Prüfziffer und Länderschlüssel stimmen — sonst manuelle Prüfung.</p>
     </section>
@@ -117,9 +128,33 @@
       <div class="dropzone">
         <div class="drop-actions">
           <label class="filebtn">Aus Galerie<input id="galleryInput" type="file" accept="image/*" multiple hidden /></label>
-          <label class="filebtn">Kamera<input id="cameraInput" type="file" accept="image/*" capture="environment" multiple hidden /></label>
+          <label class="filebtn" id="cameraStartLabel">Kamera (mehrere Fotos)<input id="cameraInput" type="file" accept="image/*" capture="environment" hidden /></label>
           <span id="fileCount" class="hint">Keine Bilder ausgewählt.</span>
         </div>
+      </div>
+
+      <div class="tips-box">
+        <h4>Tipps für bessere Erkennung</h4>
+        <ul>
+          <li>Möglichst nah am Wagenkasten fotografieren — die Nummer soll ca. die Hälfte der Bildbreite ausfüllen.</li>
+          <li>Direkt von vorne, nicht schräg — Kamera parallel zur Wagenwand halten.</li>
+          <li>Auf gute Beleuchtung achten: keinen Schatten oder direktes Gegenlicht auf der Nummer.</li>
+          <li>Nichts verdecken: Gurten, Schmutz oder Eis vor dem Foto ggf. wegwischen.</li>
+          <li>Stillhalten: Bild scharf, nicht verwackelt — bei Bedarf zweimal auslösen.</li>
+          <li>Nur eine Wagennummer pro Bild — auf das richtige Schild zoomen.</li>
+        </ul>
+      </div>
+
+      <!-- Kamera-Sammeltray: zeigt Fotos, die nacheinander aufgenommen wurden -->
+      <div class="camera-tray" id="cameraTray">
+        <div class="tray-head">
+          <div><strong id="trayCount">0</strong> <span class="hint">Foto(s) aus der Kamera. Drücke „Noch eins" für jedes weitere Bild.</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <label class="filebtn" id="cameraAddLabel">Noch eins<input id="cameraAddInput" type="file" accept="image/*" capture="environment" hidden /></label>
+            <button class="ghost" id="cameraDoneBtn" type="button">Fertig — auswerten</button>
+          </div>
+        </div>
+        <div class="tray-thumbs" id="trayThumbs"></div>
       </div>
       <div class="drop-actions">
         <button class="primary" id="processBtn">Bilder auswerten</button>
@@ -158,7 +193,7 @@
         <strong>Manuell-OK</strong>: Du hast die Nummer geprüft und freigegeben.
         <strong>Bitte prüfen</strong>: gültig, aber mittlere Confidence oder Mehrdeutigkeit.
         <strong>Blockiert</strong>: nicht eindeutig — manuelle Eingabe oder Statuswahl nötig.
-        <br><span class="hint">Tipp: Auf das Bild klicken öffnet eine große Vorschau. Status lässt sich über das Dropdown auf „Manuell-OK“ setzen.</span>
+        <br><span class="hint">Tipp: Auf das Bild klicken öffnet eine große Vorschau. Status lässt sich über das Dropdown auf „Manuell-OK“ setzen. Sobald du die Wagennummer manuell änderst, fällt der OCR-Wert automatisch auf 0 %.</span>
       </div>
     </section>
   </main>

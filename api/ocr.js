@@ -1,7 +1,7 @@
 // api/ocr.js — Vercel Serverless Function
-// Nimmt ein Bild entgegen, ruft Google Cloud Vision (DOCUMENT_TEXT_DETECTION) auf,
+// Nimmt ein Bild entgegen, ruft Azure AI Vision (Read / Image Analysis 4.0) auf,
 // extrahiert UIC-Kandidaten und liefert deterministisches JSON zurück.
-// ENV: GOOGLE_VISION_API_KEY
+// ENV: AZURE_VISION_KEY, AZURE_VISION_ENDPOINT
 // ----------------------------------------------------------------------------
 
 import { findUicCandidates } from './_uic.js';
@@ -14,7 +14,6 @@ export const config = {
   maxDuration: 20
 };
 
-const VISION_URL = 'https://vision.googleapis.com/v1/images:annotate';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;  // 5 MB Sicherheitsgrenze
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -84,30 +83,34 @@ function parseMultipart(buf, contentType) {
   return null;
 }
 
-// Sammelt pro Wort eine Confidence aus der Vision-Antwort
-function collectWordConfidences(response) {
-  const wordsByLine = new Map();
-  const pages = response.fullTextAnnotation?.pages || [];
-  for (const page of pages) {
-    for (const block of (page.blocks || [])) {
-      for (const para of (block.paragraphs || [])) {
-        // Wir gruppieren Wörter zeilenweise per y-Mittelpunkt
-        const wordsWithY = [];
-        for (const word of (para.words || [])) {
-          const sym = (word.symbols || []).map(s => s.text || '').join('');
-          const confidence = word.confidence ?? para.confidence ?? block.confidence ?? 0;
-          const vs = word.boundingBox?.vertices || [];
-          const yMid = vs.length ? (vs.reduce((a,v) => a + (v.y || 0), 0) / vs.length) : 0;
-          wordsWithY.push({ text: sym, confidence, yMid });
-        }
-        // einfache Zeilen-Bildung: nach yMid (gerundet auf 8px) gruppieren
-        for (const w of wordsWithY) {
-          const lineKey = Math.round(w.yMid / 8);
-          if (!wordsByLine.has(lineKey)) wordsByLine.set(lineKey, []);
-          wordsByLine.get(lineKey).push(w);
-        }
-      }
+// --- Azure-Antwort in vereinheitlichtes Format (mit Zeilen + Wort-Konfidenzen) ---
+function normalizeAzureResponse(azureData) {
+  // Azure Image Analysis 4.0 Read-Output:
+  // { readResult: { blocks: [{ lines: [{ text, words: [{ text, confidence, boundingPolygon }] }] }] } }
+  const lines = [];
+  let fullText = '';
+  const blocks = azureData.readResult?.blocks || [];
+  for (const block of blocks) {
+    for (const line of (block.lines || [])) {
+      const lineText = line.text || '';
+      if (fullText) fullText += '\n';
+      fullText += lineText;
+      const words = (line.words || []).map(w => {
+        const vs = w.boundingPolygon || [];
+        const yMid = vs.length ? (vs.reduce((a,v) => a + (v.y || 0), 0) / vs.length) : 0;
+        return { text: w.text || '', confidence: w.confidence ?? 0.9, yMid };
+      });
+      lines.push({ text: lineText, words });
     }
+  }
+  return { fullText, lines };
+}
+
+// Sammelt pro Zeile Wörter aus der normalisierten Antwort
+function collectWordsByLine(normalized) {
+  const wordsByLine = new Map();
+  for (let i = 0; i < normalized.lines.length; i++) {
+    wordsByLine.set(i, normalized.lines[i].words);
   }
   return wordsByLine;
 }
@@ -117,18 +120,16 @@ function collectWordConfidences(response) {
  * Versucht für jeden gefundenen Kandidaten eine Confidence zu schätzen
  * (Durchschnitt der Wort-Confidences in der zugehörigen Zeile, in der die Stellen vorkamen).
  */
-function buildCandidates(visionResponse) {
-  const fullText = visionResponse.fullTextAnnotation?.text || '';
+function buildCandidates(normalized) {
+  const fullText = normalized.fullText || '';
   const allCandidates = findUicCandidates(fullText);
-  const wordsByLine = collectWordConfidences(visionResponse);
+  const wordsByLine = collectWordsByLine(normalized);
 
-  // Map: digits -> beste Confidence
   const out = [];
   const seen = new Set();
   for (const digits of allCandidates) {
     if (seen.has(digits)) continue;
     seen.add(digits);
-    // Suche Zeile(n), die die Ziffernfolge enthält
     let bestConf = 0;
     let bestLineText = '';
     for (const [, words] of wordsByLine) {
@@ -143,8 +144,8 @@ function buildCandidates(visionResponse) {
       }
     }
     if (bestConf === 0) {
-      // Fallback: globale Confidence
-      bestConf = visionResponse.fullTextAnnotation?.pages?.[0]?.confidence || 0;
+      // Fallback: konservative Default-Confidence (Azure liefert keine globale)
+      bestConf = 0.85;
       bestLineText = '';
     }
     out.push({
@@ -153,7 +154,6 @@ function buildCandidates(visionResponse) {
       vision_confidence: Number(bestConf.toFixed(4))
     });
   }
-  // Sortiere nach Confidence absteigend
   out.sort((a, b) => b.vision_confidence - a.vision_confidence);
   return out;
 }
@@ -177,8 +177,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { setCors(res); res.status(204).end(); return; }
   if (req.method !== 'POST')    { return json(res, 405, { ok:false, error_code:'METHOD_NOT_ALLOWED' }); }
 
-  const apiKey = process.env.GOOGLE_VISION_API_KEY;
-  if (!apiKey) return json(res, 500, { ok:false, error_code:'NO_API_KEY', message:'GOOGLE_VISION_API_KEY ist nicht gesetzt' });
+  const azureKey = process.env.AZURE_VISION_KEY;
+  const azureEndpointRaw = process.env.AZURE_VISION_ENDPOINT;
+  if (!azureKey) return json(res, 500, { ok:false, error_code:'NO_AZURE_KEY', message:'AZURE_VISION_KEY ist nicht gesetzt' });
+  if (!azureEndpointRaw) return json(res, 500, { ok:false, error_code:'NO_AZURE_ENDPOINT', message:'AZURE_VISION_ENDPOINT ist nicht gesetzt' });
+  const azureEndpoint = azureEndpointRaw.replace(/\/+$/, '');
 
   // Body lesen
   let bodyBuf;
@@ -215,23 +218,22 @@ export default async function handler(req, res) {
   if (!imageBuf || imageBuf.length === 0) return json(res, 400, { ok:false, error_code:'EMPTY_IMAGE' });
   if (imageBuf.length > MAX_IMAGE_BYTES) return json(res, 413, { ok:false, error_code:'IMAGE_TOO_LARGE' });
 
-  // Vision aufrufen
-  const visionBody = {
-    requests: [{
-      image: { content: imageBuf.toString('base64') },
-      features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-      imageContext: { languageHints: ['de', 'en'] }
-    }]
-  };
+  // --- Azure Read API aufrufen ---
+  // language=de: Tipp für lateinische Schrift; features=read: OCR;
+  // model-version=latest: bestmögliche Erkennung
+  const AZURE_URL = `${azureEndpoint}/computervision/imageanalysis:analyze?api-version=2024-02-01&features=read&language=de&model-version=latest`;
 
   const controller = new AbortController();
   const to = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let visionResp;
   try {
-    visionResp = await fetch(`${VISION_URL}?key=${encodeURIComponent(apiKey)}`, {
+    visionResp = await fetch(AZURE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(visionBody),
+      headers: {
+        'Ocp-Apim-Subscription-Key': azureKey,
+        'Content-Type': 'application/octet-stream'
+      },
+      body: imageBuf,
       signal: controller.signal
     });
   } catch (e) {
@@ -250,12 +252,13 @@ export default async function handler(req, res) {
   try { visionData = await visionResp.json(); }
   catch { return json(res, 502, { ok:false, error_code:'VISION_BAD_JSON' }); }
 
-  const r0 = visionData.responses?.[0];
-  if (!r0) return json(res, 502, { ok:false, error_code:'VISION_EMPTY_RESPONSE' });
-  if (r0.error) return json(res, 502, { ok:false, error_code:'VISION_API_ERROR', message: r0.error.message || 'unknown' });
+  if (!visionData.readResult) {
+    return json(res, 502, { ok:false, error_code:'VISION_EMPTY_RESPONSE' });
+  }
 
-  const candidates = buildCandidates(r0);
-  const fullText = r0.fullTextAnnotation?.text || '';
+  const normalized = normalizeAzureResponse(visionData);
+  const candidates = buildCandidates(normalized);
+  const fullText = normalized.fullText || '';
 
   return json(res, 200, {
     ok: true,

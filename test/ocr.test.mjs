@@ -1,8 +1,7 @@
-// test/ocr.test.mjs — Unit-Tests für die Serverless Function
-// Mockt globales fetch und simuliert Vision-Antworten.
-import http from 'node:http';
+// test/ocr.test.mjs — Unit-Tests für die Serverless Function (Azure-Variante)
+// Mockt globales fetch und simuliert Azure-Read-Antworten.
 
-// --- Vision-Mock ----------------------------------------------------------
+// --- Azure-Vision-Mock ---------------------------------------------------
 let mockVisionResponse = null;
 let mockVisionStatus = 200;
 let lastFetchUrl = null;
@@ -17,14 +16,14 @@ global.fetch = async (url, init) => {
   };
 };
 
-// API-Key setzen, damit Function nicht direkt abbricht
-process.env.GOOGLE_VISION_API_KEY = 'test-key';
+// Azure-ENV setzen, damit Function nicht direkt abbricht
+process.env.AZURE_VISION_KEY = 'test-key';
+process.env.AZURE_VISION_ENDPOINT = 'https://test.cognitiveservices.azure.com';
 
 const handler = (await import('../api/ocr.js')).default;
 
 // --- Mini-Helfer: HTTP-Request gegen Handler simulieren ---
 function mockReqRes(method, headers, body) {
-  // Request als async iterable
   const bodyBuf = Buffer.isBuffer(body) ? body : Buffer.from(body || '');
   let consumed = false;
   const req = {
@@ -48,26 +47,31 @@ function mockReqRes(method, headers, body) {
   return { req, res, getResult: () => ({ statusCode, headers: resHeaders, body: resBody }) };
 }
 
-function makeVisionMock(text, wordConfidence = 0.95) {
-  // Minimaler Vision-Response, der für unsere Logik reicht
+// Erzeugt eine Azure-Read-API-Antwort aus einem Text
+// Eine Zeile pro \n im Text; Wörter werden whitespace-getrennt zerlegt.
+function makeAzureMock(text, wordConfidence = 0.95) {
+  const lines = text.split('\n').map((lineText, lineIdx) => {
+    const words = lineText.split(/\s+/).filter(Boolean).map((w, i) => ({
+      text: w,
+      confidence: wordConfidence,
+      boundingPolygon: [
+        { x: i*40, y: lineIdx*30 },
+        { x: i*40+30, y: lineIdx*30 },
+        { x: i*40+30, y: lineIdx*30+20 },
+        { x: i*40, y: lineIdx*30+20 }
+      ]
+    }));
+    return { text: lineText, words };
+  });
   return {
-    responses: [{
-      fullTextAnnotation: {
-        text,
-        pages: [{
-          confidence: wordConfidence,
-          blocks: [{
-            paragraphs: [{
-              words: text.split(/\s+/).filter(Boolean).map((w, i) => ({
-                confidence: wordConfidence,
-                symbols: w.split('').map(c => ({ text: c })),
-                boundingBox: { vertices: [{x:i*40,y:50},{x:i*40+30,y:50},{x:i*40+30,y:70},{x:i*40,y:70}] }
-              }))
-            }]
-          }]
-        }]
-      }
-    }]
+    modelVersion: '2024-02-01',
+    readResult: {
+      stringIndexType: 'TextElements',
+      content: text,
+      pages: [{ height: 600, width: 800, angle: 0, pageNumber: 1 }],
+      styles: [],
+      blocks: [{ lines }]
+    }
   };
 }
 
@@ -82,7 +86,7 @@ function assertEq(a, b, msg) {
 }
 function assertTrue(v, msg) { if (!v) throw new Error(msg || 'erwartet truthy'); }
 
-console.log('\nFühre OCR-Function-Tests aus...\n');
+console.log('\nFühre OCR-Function-Tests aus (Azure)...\n');
 
 await test('OPTIONS -> 204 + CORS', async () => {
   const { req, res, getResult } = mockReqRes('OPTIONS', {}, '');
@@ -111,9 +115,8 @@ await test('JSON-Body ohne image_base64 -> 400', async () => {
 });
 
 await test('Echte UIC-Nummer erkannt -> ok + candidates', async () => {
-  mockVisionResponse = makeVisionMock('DB Cargo\n31 81 6650 286-0\nMax 22,5 t', 0.96);
+  mockVisionResponse = makeAzureMock('DB Cargo\n31 81 6650 286-0\nMax 22,5 t', 0.96);
   mockVisionStatus = 200;
-  // 1x1 PNG (gültiges Bild)
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
   const { req, res, getResult } = mockReqRes('POST', { 'content-type': 'image/png' }, png);
   await handler(req, res);
@@ -127,7 +130,7 @@ await test('Echte UIC-Nummer erkannt -> ok + candidates', async () => {
 });
 
 await test('UIC-Nummer mit OCR-Buchstaben (O statt 0)', async () => {
-  mockVisionResponse = makeVisionMock('Wagen 31 8I 665O 286-O abc', 0.93);
+  mockVisionResponse = makeAzureMock('Wagen 31 8I 665O 286-O abc', 0.93);
   mockVisionStatus = 200;
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
   const { req, res, getResult } = mockReqRes('POST', { 'content-type': 'image/png' }, png);
@@ -138,9 +141,9 @@ await test('UIC-Nummer mit OCR-Buchstaben (O statt 0)', async () => {
             `Erwartete Kandidat 318166502860, bekam: ${JSON.stringify(data.candidates)}`);
 });
 
-await test('Vision-HTTP-Fehler -> 502 VISION_HTTP_ERROR', async () => {
-  mockVisionResponse = { error: { message: 'PERMISSION_DENIED' } };
-  mockVisionStatus = 403;
+await test('Azure-HTTP-Fehler -> 502 VISION_HTTP_ERROR', async () => {
+  mockVisionResponse = { error: { code: 'InvalidImage', message: 'unreadable' } };
+  mockVisionStatus = 400;
   const png = Buffer.from('iVBORw0KGgo=', 'base64');
   const { req, res, getResult } = mockReqRes('POST', { 'content-type': 'image/png' }, png);
   await handler(req, res);
@@ -156,8 +159,8 @@ await test('Leerer Body -> 400 EMPTY_IMAGE', async () => {
   assertTrue(getResult().body.includes('EMPTY_IMAGE'));
 });
 
-await test('Vision-Antwort ohne fullText -> blocked-tauglich (keine Kandidaten)', async () => {
-  mockVisionResponse = { responses: [{ fullTextAnnotation: { text: 'kein Wagen hier', pages:[{blocks:[]}] } }] };
+await test('Azure-Antwort ohne Treffer -> ok + keine Kandidaten', async () => {
+  mockVisionResponse = makeAzureMock('kein Wagen hier', 0.9);
   mockVisionStatus = 200;
   const png = Buffer.from('iVBORw0KGgo=', 'base64');
   const { req, res, getResult } = mockReqRes('POST', { 'content-type': 'image/png' }, png);
@@ -165,6 +168,27 @@ await test('Vision-Antwort ohne fullText -> blocked-tauglich (keine Kandidaten)'
   const data = JSON.parse(getResult().body);
   assertTrue(data.ok);
   assertEq(data.candidates, []);
+});
+
+await test('Fehlende AZURE-ENV-Variable -> 500 NO_AZURE_KEY', async () => {
+  const orig = process.env.AZURE_VISION_KEY;
+  delete process.env.AZURE_VISION_KEY;
+  const { req, res, getResult } = mockReqRes('POST', { 'content-type': 'image/png' }, Buffer.from('iVBORw0KGgo=', 'base64'));
+  await handler(req, res);
+  process.env.AZURE_VISION_KEY = orig;
+  assertEq(getResult().statusCode, 500);
+  assertTrue(getResult().body.includes('NO_AZURE_KEY'));
+});
+
+await test('Azure-URL wird korrekt zusammengesetzt', async () => {
+  mockVisionResponse = makeAzureMock('test', 0.9);
+  mockVisionStatus = 200;
+  lastFetchUrl = null;
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+  const { req, res } = mockReqRes('POST', { 'content-type': 'image/png' }, png);
+  await handler(req, res);
+  assertTrue(lastFetchUrl && lastFetchUrl.includes('imageanalysis:analyze'), `URL falsch: ${lastFetchUrl}`);
+  assertTrue(lastFetchUrl.includes('features=read'), `features fehlt: ${lastFetchUrl}`);
 });
 
 console.log(`\nErgebnis: ${passed} bestanden, ${failed} fehlgeschlagen\n`);

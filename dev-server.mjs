@@ -1,5 +1,5 @@
 // Lokaler Entwicklungs-Server: serviert /public statisch und routet /api/ocr an die Function.
-// Vision wird gemockt, wenn GOOGLE_VISION_API_KEY nicht gesetzt ist.
+// Azure wird gemockt, wenn AZURE_VISION_KEY nicht gesetzt ist.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,33 +8,38 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
 const PORT = process.env.PORT || 3000;
-const USE_MOCK = !process.env.GOOGLE_VISION_API_KEY;
+const USE_MOCK = !process.env.AZURE_VISION_KEY;
 
-// Mock Vision für lokales Testen
+// Mock Azure für lokales Testen
 if (USE_MOCK) {
-  process.env.GOOGLE_VISION_API_KEY = 'mock-key';
+  process.env.AZURE_VISION_KEY = 'mock-key';
+  process.env.AZURE_VISION_ENDPOINT = 'https://mock.cognitiveservices.azure.com';
   const origFetch = global.fetch;
   global.fetch = async (url, init) => {
-    if (typeof url === 'string' && url.includes('vision.googleapis.com')) {
-      // Liefere einen deterministischen Mock-Response zurück
-      const body = JSON.parse(init.body);
-      const b64 = body.requests[0].image.content;
-      // Wenn das Bild groß genug ist, simulieren wir eine erkannte Nummer
-      const text = b64.length > 100 ? '31 81 6650 286-0' : '';
+    if (typeof url === 'string' && url.includes('imageanalysis:analyze')) {
+      // Body ist ein Buffer (Azure erwartet Binary). Größe approximiert „Bild vorhanden".
+      const bodyLen = init && init.body ? (init.body.length || (init.body.byteLength || 0)) : 0;
+      const text = bodyLen > 200 ? '31 81 6650 286-0' : '';
+      const lines = text ? [{
+        text,
+        words: text.split(/\s+/).map((w, i) => ({
+          text: w,
+          confidence: 0.95,
+          boundingPolygon: [
+            { x: i*40, y: 50 }, { x: i*40+30, y: 50 },
+            { x: i*40+30, y: 70 }, { x: i*40, y: 70 }
+          ]
+        }))
+      }] : [];
       const mock = {
-        responses: [{
-          fullTextAnnotation: {
-            text,
-            pages: text ? [{
-              confidence: 0.95,
-              blocks: [{ paragraphs: [{ words: text.split(/\s+/).map((w,i) => ({
-                confidence: 0.95,
-                symbols: w.split('').map(c => ({ text: c })),
-                boundingBox: { vertices: [{x:i*40,y:50},{x:i*40+30,y:50},{x:i*40+30,y:70},{x:i*40,y:70}] }
-              })) }] }]
-            }] : []
-          }
-        }]
+        modelVersion: '2024-02-01',
+        readResult: {
+          stringIndexType: 'TextElements',
+          content: text,
+          pages: [{ height: 600, width: 800, angle: 0, pageNumber: 1 }],
+          styles: [],
+          blocks: text ? [{ lines }] : []
+        }
       };
       return { ok: true, status: 200, json: async () => mock, text: async () => JSON.stringify(mock) };
     }
@@ -72,4 +77,4 @@ const server = http.createServer(async (req, res) => {
     res.end(data);
   });
 });
-server.listen(PORT, () => console.log(`Wagenident dev server on http://localhost:${PORT}${USE_MOCK?' (Vision MOCK aktiv)':''}`));
+server.listen(PORT, () => console.log(`Wagenident dev server on http://localhost:${PORT}${USE_MOCK?' (Azure MOCK aktiv)':''}`));

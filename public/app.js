@@ -5,6 +5,11 @@ import { decideStatus, decideManualEntry } from './lib/uic.js';
 const $ = (id) => document.getElementById(id);
 const galleryInput = $('galleryInput');
 const cameraInput  = $('cameraInput');
+const cameraAddInput = $('cameraAddInput');
+const cameraDoneBtn  = $('cameraDoneBtn');
+const cameraTray     = $('cameraTray');
+const trayCount      = $('trayCount');
+const trayThumbs     = $('trayThumbs');
 const fileCount    = $('fileCount');
 const processBtn   = $('processBtn');
 const excelBtn     = $('excelBtn');
@@ -36,6 +41,7 @@ const STATE = {
   rows: [],
   emails: [],
   selectedFiles: [],
+  cameraFiles: [],          // gesammelte Kamera-Aufnahmen (mehrere nacheinander)
   overrideCallback: null
 };
 
@@ -102,14 +108,72 @@ function refreshFileCount() {
 }
 function collectSelectedFiles() {
   const map = new Map();
-  [...(galleryInput.files || []), ...(cameraInput.files || [])].forEach(f => {
+  const gallery = [...(galleryInput.files || [])];
+  const camera = STATE.cameraFiles.map(c => c.file);
+  [...gallery, ...camera].forEach(f => {
     const key = `${f.name}_${f.size}_${f.lastModified}`;
     if (!map.has(key)) map.set(key, f);
   });
   return [...map.values()];
 }
 galleryInput.addEventListener('change', refreshFileCount);
-cameraInput.addEventListener('change', refreshFileCount);
+
+// ---------- Kamera-Sammelmodus (mehrere Fotos vor Auswertung) ----------
+// Logik: Erstes Foto über #cameraInput, jedes weitere über #cameraAddInput.
+// Jedes neue Bild landet in STATE.cameraFiles und erscheint im Tray.
+async function addCameraFile(file) {
+  if (!file) return;
+  // Vorschau (kleiner Thumbnail) erzeugen
+  let thumbUrl = '';
+  try {
+    const bm = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const c = document.createElement('canvas');
+    const s = Math.min(1, 96 / Math.max(bm.width, bm.height));
+    c.width = Math.round(bm.width * s); c.height = Math.round(bm.height * s);
+    c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height);
+    if (bm.close) bm.close();
+    thumbUrl = c.toDataURL('image/jpeg', 0.7);
+  } catch {}
+  // Eindeutigen Namen vergeben (iOS schickt teils gleichen Dateinamen für jede Aufnahme)
+  const ts = Date.now();
+  const ext = (file.name.match(/\.[a-z0-9]+$/i) || ['.jpg'])[0];
+  const safe = new File([file], `kamera_${ts}${ext}`, { type: file.type || 'image/jpeg', lastModified: ts });
+  STATE.cameraFiles.push({ file: safe, thumbUrl, ts });
+  renderCameraTray();
+  refreshFileCount();
+}
+
+function renderCameraTray() {
+  const n = STATE.cameraFiles.length;
+  trayCount.textContent = String(n);
+  cameraTray.classList.toggle('show', n > 0);
+  trayThumbs.innerHTML = STATE.cameraFiles.map((c, i) => `
+    <div class="tray-thumb">
+      <img src="${c.thumbUrl}" alt="Kamera-Foto ${i+1}">
+      <button type="button" data-i="${i}" aria-label="Entfernen">✕</button>
+    </div>`).join('');
+  trayThumbs.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    STATE.cameraFiles.splice(Number(b.dataset.i), 1);
+    renderCameraTray();
+    refreshFileCount();
+  }));
+}
+
+cameraInput.addEventListener('change', async () => {
+  const f = cameraInput.files && cameraInput.files[0];
+  if (f) await addCameraFile(f);
+  cameraInput.value = '';  // Reset, damit dasselbe Bild erneut ausgewählt werden könnte
+});
+cameraAddInput.addEventListener('change', async () => {
+  const f = cameraAddInput.files && cameraAddInput.files[0];
+  if (f) await addCameraFile(f);
+  cameraAddInput.value = '';
+});
+cameraDoneBtn.addEventListener('click', () => {
+  if (STATE.cameraFiles.length === 0) { setStatus('Noch keine Kamera-Aufnahmen.', 'err'); return; }
+  // Tray einklappen und direkt Auswertung starten
+  processBtn.click();
+});
 
 // ---------- Bildvorverarbeitung ----------
 // Liefert: { blob (für OCR-Upload), thumbDataUrl (Tabellen-Thumbnail), fullDataUrl (Lightbox) }
@@ -220,14 +284,19 @@ function isOk(status) { return status === 'auto_ok' || status === 'manual_ok'; }
 
 // ---------- Render-Tabelle ----------
 function statusDropdown(row) {
-  // 'Auto-OK' nur wählbar, wenn Validierung das hergibt — sonst deaktiviert.
-  // Benutzer kann zwischen den anderen Status frei wählen.
-  const opts = [
-    { v: 'auto_ok',   t: 'Auto-OK',     disabled: row.status !== 'auto_ok' },
-    { v: 'manual_ok', t: 'Manuell-OK',  disabled: false },
-    { v: 'check',     t: 'Bitte prüfen',disabled: false },
-    { v: 'blocked',   t: 'Blockiert',   disabled: false }
-  ];
+  // Auto-OK ist KEINE manuell wählbare Option (wird vom System gesetzt).
+  // Wenn die Zeile aktuell Auto-OK ist, zeigen wir das als (gesperrten) Eintrag an,
+  // damit der Status sichtbar bleibt — der Nutzer kann auf Manuell-OK, Bitte prüfen
+  // oder Blockiert wechseln.
+  const opts = [];
+  if (row.status === 'auto_ok') {
+    opts.push({ v: 'auto_ok', t: 'Auto-OK (automatisch)', disabled: true });
+  }
+  opts.push(
+    { v: 'manual_ok', t: 'Manuell-OK',   disabled: false },
+    { v: 'check',     t: 'Bitte prüfen', disabled: false },
+    { v: 'blocked',   t: 'Blockiert',    disabled: false }
+  );
   return `<select class="status-select" data-id="${row.id}" aria-label="Status ändern">
     ${opts.map(o => `<option value="${o.v}"${o.v===row.status?' selected':''}${o.disabled?' disabled':''}>${o.t}</option>`).join('')}
   </select>`;
@@ -272,10 +341,13 @@ function renderRows() {
       const decision = decideManualEntry(inp.value);
       row.digits = decision.digits;
       row.formatted = decision.formatted;
-      row.status = decision.status;       // wird auto_ok/check/blocked
+      // Manuell geänderte Nummer => niemals Auto-OK. Wenn die Validierung
+      // 'auto_ok' liefern würde, behandeln wir es als 'manual_ok'.
+      row.status = decision.status === 'auto_ok' ? 'manual_ok' : decision.status;
       row.reasons = decision.reasons;
-      row.confidence = decision.confidence;
       row.country = decision.country;
+      // OCR-Konfidenz auf 0 setzen — die Nummer kommt jetzt vom Menschen, nicht aus dem OCR.
+      row.confidence = 0;
       row.manualEdited = true;
       renderRows();
       updateSummary();
@@ -358,6 +430,11 @@ processBtn.addEventListener('click', async () => {
     STATE.rows.push(row);
     renderRows();
   }
+  // Nach erfolgreicher Auswertung: Kamera-Tray leeren, damit die nächste Session frisch startet.
+  STATE.cameraFiles = [];
+  renderCameraTray();
+  galleryInput.value = '';
+  refreshFileCount();
   const { ok, ck, bl } = updateSummary();
   setStatus(`<span class="ok">${ok} OK</span> · <span class="warn">${ck} bitte prüfen</span> · <span class="err">${bl} blockiert</span>`);
   processBtn.disabled = false;
@@ -442,8 +519,11 @@ mailBtn.addEventListener('click', () => withBlockedGuard(() => {
 resetBtn.addEventListener('click', () => {
   STATE.rows = [];
   STATE.selectedFiles = [];
+  STATE.cameraFiles = [];
   galleryInput.value = '';
   cameraInput.value = '';
+  if (cameraAddInput) cameraAddInput.value = '';
+  renderCameraTray();
   renderRows();
   refreshFileCount();
   updateExportGates();

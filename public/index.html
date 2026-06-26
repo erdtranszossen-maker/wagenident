@@ -135,8 +135,12 @@
     .lightbox.editing .lightbox-img-wrap img{max-height:35vh}
     /* Schließen-X: untere rechte Ecke des Bilds */
     .lightbox-close{position:absolute;bottom:10px;right:10px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2}
-    /* Hinweistext: untere linke Ecke des Bilds, nicht des Viewports */
-    .lightbox-hint{position:absolute;left:10px;bottom:10px;color:#fff;font-size:12px;line-height:1.35;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:8px;max-width:calc(100% - 70px);z-index:2}
+    /* Hinweistext: jetzt OBEN am Bild, damit unten links der Bestätigen-Button Platz hat */
+    .lightbox-hint{position:absolute;left:10px;top:10px;color:#fff;font-size:12px;line-height:1.35;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:8px;max-width:calc(100% - 70px);z-index:2}
+    /* Bestätigen-Button: untere linke Ecke des Bilds, nur sichtbar bei blockierten Zeilen */
+    .lightbox-confirm{position:absolute;bottom:10px;left:10px;height:44px;padding:0 16px;border-radius:22px;background:#2e7d32;color:#fff;border:none;font-size:14px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2}
+    .lightbox-confirm.show{display:inline-flex}
+    .lightbox-confirm:active{background:#1b5e20}
     /* Edit-Bereich unter dem Bild: Wagennummer + Status der geklickten Zeile */
     .lightbox-edit{margin-top:12px;width:100%;max-width:560px;background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.35);flex:0 0 auto}
     .lightbox-edit label{display:block;font-size:12px;font-weight:600;color:#444;margin-bottom:6px}
@@ -357,6 +361,7 @@
     <div class="lightbox-img-wrap">
       <img id="lightboxImg" src="" alt="">
       <div class="lightbox-hint">Wagennummer unten bearbeiten.</div>
+      <button class="lightbox-confirm" id="lightboxConfirm" aria-label="Wagennummer manuell bestätigen" type="button">✓ Manuell OK</button>
       <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
     </div>
     <div class="lightbox-edit" id="lightboxEdit" style="display:none">

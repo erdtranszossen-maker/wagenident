@@ -39,6 +39,7 @@ const lightboxClose= $('lightboxClose');
 const lightboxEdit = $('lightboxEdit');
 const lightboxNumInput = $('lightboxNumInput');
 const lightboxStatus = $('lightboxStatus');
+const lightboxConfirm = $('lightboxConfirm');
 // ID der Zeile, deren Bild aktuell in der Lightbox angezeigt wird (für Inline-Edit)
 let lightboxRowId = null;
 
@@ -660,11 +661,16 @@ function openLightbox(src, name, rowId) {
       lightboxEdit.style.display = '';
       lightboxNumInput.value = row.formatted || row.digits || '';
       renderLightboxStatus(row);
+      // Bestätigen-Button nur bei blockierten Zeilen anzeigen — schneller Freigabe-Workflow
+      if (row.status === 'blocked') lightboxConfirm.classList.add('show');
+      else lightboxConfirm.classList.remove('show');
     } else {
       lightboxEdit.style.display = 'none';
+      lightboxConfirm.classList.remove('show');
     }
   } else {
     lightboxEdit.style.display = 'none';
+    lightboxConfirm.classList.remove('show');
   }
 }
 function closeLightbox() {
@@ -673,6 +679,7 @@ function closeLightbox() {
   lightboxImg.src = '';
   lightboxRowId = null;
   lightboxEdit.style.display = 'none';
+  lightboxConfirm.classList.remove('show');
 }
 lightboxClose.addEventListener('click', closeLightbox);
 // Kein Backdrop-Klick-Close: Auf iOS führen Layout-Shifts beim Öffnen/Schließen der
@@ -680,6 +687,21 @@ lightboxClose.addEventListener('click', closeLightbox);
 // Lightbox versehentlich schließen, während der Nutzer die Wagennummer bearbeitet.
 // Schließen geht nur über den X-Button oder ESC.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeLightbox(); closeDetails(); } });
+
+// Bestätigen-Button: setzt Status auf manual_ok (gleiche Logik wie Dropdown-Auswahl 'manual_ok')
+// und schließt die Lightbox sofort, damit der Nutzer schnell zur nächsten Zeile kann.
+lightboxConfirm.addEventListener('click', () => {
+  if (!lightboxRowId) return;
+  const row = STATE.rows.find(x => x.id === lightboxRowId);
+  if (!row) return;
+  row.status = 'manual_ok';
+  row.manualEdited = true;
+  row.reasons = ['Manuell freigegeben'];
+  renderRows();
+  updateSummary();
+  updateExportGates();
+  closeLightbox();
+});
 
 // Lightbox-Wagennummer-Edit: gleiche Logik wie Tabellen-Input ('input' = roh, 'change' = validieren)
 lightboxNumInput.addEventListener('focus', () => { lightbox.classList.add('editing'); });

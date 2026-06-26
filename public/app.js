@@ -498,19 +498,25 @@ function statusDropdown(row) {
 
 function renderRows() {
   if (!STATE.rows.length) {
-    resultsBody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">Noch keine Daten.</td></tr>';
+    resultsBody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Noch keine Daten.</td></tr>';
     summary.style.display = 'none';
     return;
   }
   resultsBody.innerHTML = STATE.rows.map(r => {
     const val = r.formatted || r.digits || '';
+    // Status-Hinweis bleibt unter Wagennummer (z. B. "Prüfziffer falsch", "Manuell freigegeben").
     const reason = r.reasons && r.reasons.length ? `<div class="reason">${escapeHtml(r.reasons.join(' · '))}</div>` : '';
-    const country = r.country ? `<div class="reason">${escapeHtml(r.country)}${r.confidence!=null?` · OCR ${(r.confidence*100).toFixed(0)}%`:''}</div>` : '';
+
+    // --- OCR-Infos-Spalte (neu, rechts vom Datum): nur für Admins/Diagnose ---
+    const ocrCountryLine = r.country
+      ? `<div class="ocr-line">${escapeHtml(r.country)}${r.confidence!=null?` · OCR ${(r.confidence*100).toFixed(0)}%`:''}</div>`
+      : (r.confidence!=null ? `<div class="ocr-line">OCR ${(r.confidence*100).toFixed(0)}%</div>` : '');
     const sourcePill = r.sourcePill ? `<span class="source-pill">${escapeHtml(r.sourcePill)}</span>` : '';
     const detailsBtn = (r.rawText || r.candidates?.length || r.attempts?.length || r.usedImageDataUrl)
       ? `<button type="button" class="details-btn" data-id="${r.id}">OCR-Details</button>` : '';
-    const reasonRow = (sourcePill || detailsBtn)
-      ? `<div class="reason-row" style="margin-top:6px">${sourcePill}${detailsBtn}</div>` : '';
+    const ocrActions = (sourcePill || detailsBtn)
+      ? `<div class="ocr-actions">${sourcePill}${detailsBtn}</div>` : '';
+    const ocrCell = (ocrCountryLine || ocrActions) ? `${ocrCountryLine}${ocrActions}` : '<span style="color:var(--muted)">—</span>';
 
     const thumb = r.thumbDataUrl
       ? `<img class="thumb thumb-zoom" data-id="${r.id}" src="${r.thumbDataUrl}" alt="Bild vergrößern" title="Bild vergrößern">`
@@ -525,12 +531,11 @@ function renderRows() {
         <td class="col-num">
           <input class="num-input" data-id="${r.id}" value="${escapeHtml(val)}" placeholder="manuell eingeben" inputmode="numeric" autocomplete="off" />
           ${reason}
-          ${country}
-          ${reasonRow}
         </td>
         <td class="col-img">${thumb}</td>
         <td class="col-loc">${escapeHtml(r.standort)}<div class="reason" style="font-size:11px" title="${escapeHtml(r.fileName)}">${escapeHtml(r.fileName)}</div></td>
         <td class="col-date">${r.datum}</td>
+        <td class="col-ocr">${ocrCell}</td>
       </tr>`;
   }).join('');
 

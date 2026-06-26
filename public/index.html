@@ -78,7 +78,12 @@
     table.results-table th.col-date,
     table.results-table td.col-date{min-width:104px;width:104px;white-space:nowrap}
     /* Eingabefeld muss die volle Spaltenbreite nutzen, damit Prüfziffer sichtbar bleibt */
-    table.results-table td.col-num input.num-input{width:100%;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.5px}
+    table.results-table td.col-num input.num-input{width:100%;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.5px;font-size:16px}
+    /* iOS Safari zoomt automatisch in Inputs mit <16px Schrift — 16px verhindert das. */
+    table.results-table th.col-ocr,
+    table.results-table td.col-ocr{min-width:180px;width:200px;color:var(--muted);font-size:12px}
+    table.results-table td.col-ocr .ocr-line{margin-bottom:3px;line-height:1.35}
+    table.results-table td.col-ocr .ocr-actions{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}
     /* Scroll-Hinweis unter der Tabelle */
     .scroll-hint{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin-top:6px}
 
@@ -121,8 +126,11 @@
     .lightbox{display:none;position:fixed;top:0;left:0;right:0;height:45vh;background:rgba(0,0,0,.94);z-index:200;align-items:center;justify-content:center;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);pointer-events:auto}
     .lightbox.show{display:flex}
     .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-    .lightbox-hint{position:absolute;left:14px;bottom:8px;color:#e8e6e0;font-size:12px;opacity:.85}
-    .lightbox-close{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .lightbox-hint{position:absolute;left:14px;bottom:8px;color:#e8e6e0;font-size:12px;opacity:.85;max-width:calc(100% - 80px)}
+    /* Schließen-X klebt am Bild unten rechts, nicht am Viewport */
+    .lightbox-img-wrap{position:relative;display:inline-block;max-width:100%;max-height:100%}
+    .lightbox-img-wrap img{display:block;max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    .lightbox-close{position:absolute;bottom:10px;right:10px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2}
 
     /* Tipps-Box */
     .tips-box{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff8e8;border:1px solid #f0d99e}
@@ -250,7 +258,7 @@
           <figure class="example bad">
             <div class="ex-head">❌ So nicht</div>
             <img src="./img/foto-schlecht.jpg" alt="Beispiel für ein schlechtes Foto: weitere Zahlen drumherum" data-example="bad">
-            <figcaption class="ex-body">Streckenklassen-Tabelle (39 / 47 / 55) und Längenangaben (49,0 m / 18,5 m) sind im Bild. Diese Zahlen verwirren die Erkennung und führen oft zu „blockiert“.</figcaption>
+            <figcaption class="ex-body">Weitere Zahlen auf dem Foto verwirren die Erkennung und führen häufig zum Status „blockiert“.</figcaption>
           </figure>
         </div>
       </div>
@@ -305,10 +313,11 @@
             <th class="col-img">Bild</th>
             <th class="col-loc">Standort</th>
             <th class="col-date">Datum</th>
+            <th class="col-ocr">OCR-Infos</th>
           </tr>
         </thead>
         <tbody id="resultsBody">
-          <tr><td colspan="5" style="color:var(--muted)">Noch keine Daten.</td></tr>
+          <tr><td colspan="6" style="color:var(--muted)">Noch keine Daten.</td></tr>
         </tbody>
       </table>
       </div>
@@ -331,8 +340,10 @@
 
   <!-- Lightbox: schwebt oben, blockiert die Eingabe darunter NICHT -->
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="false" aria-label="Bildvorschau">
-    <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
-    <img id="lightboxImg" src="" alt="">
+    <div class="lightbox-img-wrap">
+      <img id="lightboxImg" src="" alt="">
+      <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
+    </div>
     <div class="lightbox-hint">Du kannst weiter unten in das Wagennummer-Feld tippen.</div>
   </div>
 

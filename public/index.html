@@ -78,12 +78,7 @@
     table.results-table th.col-date,
     table.results-table td.col-date{min-width:104px;width:104px;white-space:nowrap}
     /* Eingabefeld muss die volle Spaltenbreite nutzen, damit Prüfziffer sichtbar bleibt */
-    table.results-table td.col-num input.num-input{width:100%;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.5px;font-size:16px}
-    /* iOS Safari zoomt automatisch in Inputs mit <16px Schrift — 16px verhindert das. */
-    table.results-table th.col-ocr,
-    table.results-table td.col-ocr{min-width:180px;width:200px;color:var(--muted);font-size:12px}
-    table.results-table td.col-ocr .ocr-line{margin-bottom:3px;line-height:1.35}
-    table.results-table td.col-ocr .ocr-actions{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}
+    table.results-table td.col-num input.num-input{width:100%;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.5px}
     /* Scroll-Hinweis unter der Tabelle */
     .scroll-hint{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin-top:6px}
 
@@ -122,36 +117,18 @@
     .file-cell .name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .status-select{margin-top:6px;min-width:130px;padding:6px 8px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer}
     /* Lightbox: schwebt oben, blockiert das Eingabefeld der Zeile NICHT.
-       Nutzer kann parallel im Eingabefeld der Wagennummer tippen.
-       Höhe richtet sich nach dem Bild (max 70vh), damit X und Hinweistext
-       IMMER am Bildrand kleben — nie mitten im Bild liegen. */
-    .lightbox{display:none;position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,.94);z-index:200;align-items:center;justify-content:center;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);pointer-events:auto}
+       Nutzer kann parallel im Eingabefeld der Wagennummer tippen. */
+    .lightbox{display:none;position:fixed;top:0;left:0;right:0;height:45vh;background:rgba(0,0,0,.94);z-index:200;align-items:center;justify-content:center;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);pointer-events:auto}
     .lightbox.show{display:flex}
-    /* Bild-Wrap: bestimmt die Lightbox-Höhe, X und Hint sind hier verankert */
-    .lightbox-img-wrap{position:relative;display:inline-block;max-width:100%;max-height:70vh;line-height:0}
-    .lightbox-img-wrap img{display:block;max-width:100%;max-height:70vh;width:auto;height:auto;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-    /* Schließen-X: untere rechte Ecke des Bilds */
-    .lightbox-close{position:absolute;bottom:10px;right:10px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2}
-    /* Hinweistext: untere linke Ecke des Bilds, nicht des Viewports */
-    .lightbox-hint{position:absolute;left:10px;bottom:10px;color:#fff;font-size:12px;line-height:1.35;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:8px;max-width:calc(100% - 70px);z-index:2}
+    .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    .lightbox-hint{position:absolute;left:14px;bottom:8px;color:#e8e6e0;font-size:12px;opacity:.85}
+    .lightbox-close{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
     /* Tipps-Box */
     .tips-box{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff8e8;border:1px solid #f0d99e}
     .tips-box h4{margin:0 0 6px;font-size:13px;font-weight:700;color:#7a5300}
     .tips-box ul{margin:0;padding-left:18px;color:#5a4400;font-size:12.5px;line-height:1.55}
     .tips-box ul li{margin-bottom:2px}
-    /* Beispielfotos */
-    .examples{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-    .example{background:#fff;border-radius:10px;overflow:hidden;border:1px solid #f0d99e}
-    .example img{width:100%;height:140px;object-fit:cover;display:block;cursor:zoom-in}
-    .example .ex-head{padding:6px 10px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
-    .example.good .ex-head{background:#dcfce7;color:#166534}
-    .example.bad .ex-head{background:#fee2e2;color:#991b1b}
-    .example .ex-body{padding:6px 10px 10px;font-size:11.5px;color:#5a4400;line-height:1.45}
-    @media (max-width:520px){
-      .examples{grid-template-columns:1fr}
-      .example img{height:180px}
-    }
 
     /* Kamera-Tray + Overlay-Maske */
     .camera-tray{margin-top:12px;padding:12px;border-radius:12px;background:#eef6f6;border:1px dashed rgba(1,105,111,.3);display:none}
@@ -252,18 +229,6 @@
           <li>Nichts verdecken: Schmutz, Eis oder andere Sichtbehinderungen vor dem Foto ggf. entfernen.</li>
           <li>Stillhalten: Bild scharf, nicht verwackelt — bei Bedarf zweimal auslösen.</li>
         </ul>
-        <div class="examples">
-          <figure class="example good">
-            <div class="ex-head">✅ So sieht ein gutes Foto aus</div>
-            <img src="./img/foto-gut.jpg" alt="Beispiel für ein gutes Foto: nur die UIC-Nummer im Bild" data-example="good">
-            <figcaption class="ex-body">Nur die UIC-Nummer ist zu sehen. Keine Störzahlen drumherum. Erkennung klappt zuverlässig.</figcaption>
-          </figure>
-          <figure class="example bad">
-            <div class="ex-head">❌ So nicht</div>
-            <img src="./img/foto-schlecht.jpg" alt="Beispiel für ein schlechtes Foto: weitere Zahlen drumherum" data-example="bad">
-            <figcaption class="ex-body">Weitere Zahlen auf dem Foto verwirren die Erkennung und führen häufig zum Status „blockiert“.</figcaption>
-          </figure>
-        </div>
       </div>
 
       <label>Bilder auswählen oder aufnehmen</label>
@@ -316,11 +281,10 @@
             <th class="col-img">Bild</th>
             <th class="col-loc">Standort</th>
             <th class="col-date">Datum</th>
-            <th class="col-ocr">OCR-Infos</th>
           </tr>
         </thead>
         <tbody id="resultsBody">
-          <tr><td colspan="6" style="color:var(--muted)">Noch keine Daten.</td></tr>
+          <tr><td colspan="5" style="color:var(--muted)">Noch keine Daten.</td></tr>
         </tbody>
       </table>
       </div>
@@ -343,11 +307,9 @@
 
   <!-- Lightbox: schwebt oben, blockiert die Eingabe darunter NICHT -->
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="false" aria-label="Bildvorschau">
-    <div class="lightbox-img-wrap">
-      <img id="lightboxImg" src="" alt="">
-      <div class="lightbox-hint">Du kannst weiter unten in das Wagennummer-Feld tippen.</div>
-      <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
-    </div>
+    <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
+    <img id="lightboxImg" src="" alt="">
+    <div class="lightbox-hint">Du kannst weiter unten in das Wagennummer-Feld tippen.</div>
   </div>
 
   <!-- Override-Modal -->

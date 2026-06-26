@@ -666,15 +666,23 @@ function openLightbox(src, name, rowId) {
       renderLightboxStatus(row);
       // Bestätigen-Buttons bei blockierten ODER "Bitte prüfen"-Zeilen anzeigen
       // (schneller Freigabe-Workflow für alle Zeilen, die manuelle Sichtprüfung brauchen)
-      if (row.status === 'blocked' || row.status === 'check') lightboxActions.classList.add('show');
-      else lightboxActions.classList.remove('show');
+      // OK-Buttons nur bei blocked/check anzeigen; X bleibt immer sichtbar (Container ist immer da).
+      if (row.status === 'blocked' || row.status === 'check') {
+        lightboxConfirmNext.classList.add('show');
+        lightboxConfirm.classList.add('show');
+      } else {
+        lightboxConfirmNext.classList.remove('show');
+        lightboxConfirm.classList.remove('show');
+      }
     } else {
       lightboxEdit.style.display = 'none';
-      lightboxActions.classList.remove('show');
+      lightboxConfirmNext.classList.remove('show');
+      lightboxConfirm.classList.remove('show');
     }
   } else {
     lightboxEdit.style.display = 'none';
-    lightboxActions.classList.remove('show');
+    lightboxConfirmNext.classList.remove('show');
+    lightboxConfirm.classList.remove('show');
   }
 }
 
@@ -721,7 +729,8 @@ function closeLightbox() {
   lightboxImg.src = '';
   lightboxRowId = null;
   lightboxEdit.style.display = 'none';
-  lightboxActions.classList.remove('show');
+  lightboxConfirmNext.classList.remove('show');
+  lightboxConfirm.classList.remove('show');
 }
 lightboxClose.addEventListener('click', closeLightbox);
 // Kein Backdrop-Klick-Close: Auf iOS führen Layout-Shifts beim Öffnen/Schließen der

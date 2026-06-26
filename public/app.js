@@ -40,6 +40,9 @@ const lightboxEdit = $('lightboxEdit');
 const lightboxNumInput = $('lightboxNumInput');
 const lightboxStatus = $('lightboxStatus');
 const lightboxConfirm = $('lightboxConfirm');
+const lightboxConfirmNext = $('lightboxConfirmNext');
+const lightboxActions = $('lightboxActions');
+const toastEl = $('toast');
 // ID der Zeile, deren Bild aktuell in der Lightbox angezeigt wird (für Inline-Edit)
 let lightboxRowId = null;
 
@@ -534,11 +537,11 @@ function renderRows() {
           <span class="badge ${badgeCls}">${STATUS_LABEL[r.status] || r.status}</span>
           ${statusDropdown(r)}
         </td>
+        <td class="col-img">${thumb}</td>
         <td class="col-num">
           <input class="num-input" data-id="${r.id}" value="${escapeHtml(val)}" placeholder="manuell eingeben" inputmode="numeric" autocomplete="off" />
           ${reason}
         </td>
-        <td class="col-img">${thumb}</td>
         <td class="col-loc">${escapeHtml(r.standort)}<div class="reason" style="font-size:11px" title="${escapeHtml(r.fileName)}">${escapeHtml(r.fileName)}</div></td>
         <td class="col-date">${r.datum}</td>
         <td class="col-ocr">${ocrCell}</td>
@@ -661,18 +664,56 @@ function openLightbox(src, name, rowId) {
       lightboxEdit.style.display = '';
       lightboxNumInput.value = row.formatted || row.digits || '';
       renderLightboxStatus(row);
-      // Bestätigen-Button bei blockierten ODER "Bitte prüfen"-Zeilen anzeigen
+      // Bestätigen-Buttons bei blockierten ODER "Bitte prüfen"-Zeilen anzeigen
       // (schneller Freigabe-Workflow für alle Zeilen, die manuelle Sichtprüfung brauchen)
-      if (row.status === 'blocked' || row.status === 'check') lightboxConfirm.classList.add('show');
-      else lightboxConfirm.classList.remove('show');
+      if (row.status === 'blocked' || row.status === 'check') lightboxActions.classList.add('show');
+      else lightboxActions.classList.remove('show');
     } else {
       lightboxEdit.style.display = 'none';
-      lightboxConfirm.classList.remove('show');
+      lightboxActions.classList.remove('show');
     }
   } else {
     lightboxEdit.style.display = 'none';
-    lightboxConfirm.classList.remove('show');
+    lightboxActions.classList.remove('show');
   }
+}
+
+// Toast-Helfer für kurze Bestätigungen (z. B. "Alle geprüft")
+let toastTimer = null;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+
+// Setzt aktuelle Lightbox-Zeile auf manual_ok (gleiche Logik wie der einfache Confirm-Button)
+function markCurrentRowManualOk() {
+  if (!lightboxRowId) return null;
+  const row = STATE.rows.find(x => x.id === lightboxRowId);
+  if (!row) return null;
+  row.status = 'manual_ok';
+  row.manualEdited = true;
+  row.reasons = ['Manuell freigegeben'];
+  return row;
+}
+
+// Nächste zu prüfende Zeile NACH der aktuellen rowId. Reihenfolge wie in STATE.rows / Tabelle.
+function findNextReviewRow(afterRowId) {
+  const idx = STATE.rows.findIndex(r => r.id === afterRowId);
+  if (idx < 0) return null;
+  for (let i = idx + 1; i < STATE.rows.length; i++) {
+    const r = STATE.rows[i];
+    if (r.status === 'blocked' || r.status === 'check') return r;
+  }
+  return null;
+}
+
+function closeLightboxRefreshState() {
+  // Re-Render und Export-Gates aktualisieren, dann Lightbox-State zurücksetzen
+  renderRows();
+  updateSummary();
+  updateExportGates();
 }
 function closeLightbox() {
   lightbox.classList.remove('show');
@@ -680,7 +721,7 @@ function closeLightbox() {
   lightboxImg.src = '';
   lightboxRowId = null;
   lightboxEdit.style.display = 'none';
-  lightboxConfirm.classList.remove('show');
+  lightboxActions.classList.remove('show');
 }
 lightboxClose.addEventListener('click', closeLightbox);
 // Kein Backdrop-Klick-Close: Auf iOS führen Layout-Shifts beim Öffnen/Schließen der
@@ -689,19 +730,27 @@ lightboxClose.addEventListener('click', closeLightbox);
 // Schließen geht nur über den X-Button oder ESC.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeLightbox(); closeDetails(); } });
 
-// Bestätigen-Button: setzt Status auf manual_ok (gleiche Logik wie Dropdown-Auswahl 'manual_ok')
-// und schließt die Lightbox sofort, damit der Nutzer schnell zur nächsten Zeile kann.
+// "OK & schließen": setzt Status auf manual_ok und schließt die Lightbox.
 lightboxConfirm.addEventListener('click', () => {
-  if (!lightboxRowId) return;
-  const row = STATE.rows.find(x => x.id === lightboxRowId);
+  const row = markCurrentRowManualOk();
   if (!row) return;
-  row.status = 'manual_ok';
-  row.manualEdited = true;
-  row.reasons = ['Manuell freigegeben'];
-  renderRows();
-  updateSummary();
-  updateExportGates();
+  closeLightboxRefreshState();
   closeLightbox();
+});
+
+// "OK & weiter": setzt Status auf manual_ok und öffnet die nächste blocked/check-Zeile.
+// Wenn keine mehr da ist, schließt die Lightbox und zeigt "Alle geprüft".
+lightboxConfirmNext.addEventListener('click', () => {
+  const row = markCurrentRowManualOk();
+  if (!row) return;
+  const next = findNextReviewRow(row.id);
+  closeLightboxRefreshState();
+  if (next) {
+    openLightbox(next.fullDataUrl || next.thumbDataUrl, next.fileName, next.id);
+  } else {
+    closeLightbox();
+    showToast('Alle geprüft');
+  }
 });
 
 // Lightbox-Wagennummer-Edit: gleiche Logik wie Tabellen-Input ('input' = roh, 'change' = validieren)

@@ -137,10 +137,19 @@
     .lightbox-close{position:absolute;bottom:10px;right:10px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2}
     /* Hinweistext: jetzt OBEN am Bild, damit unten links der Bestätigen-Button Platz hat */
     .lightbox-hint{position:absolute;left:10px;top:10px;color:#fff;font-size:12px;line-height:1.35;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:8px;max-width:calc(100% - 70px);z-index:2}
-    /* Bestätigen-Button: untere linke Ecke des Bilds, nur sichtbar bei blockierten Zeilen */
-    .lightbox-confirm{position:absolute;bottom:10px;left:10px;height:44px;padding:0 16px;border-radius:22px;background:#2e7d32;color:#fff;border:none;font-size:14px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2}
-    .lightbox-confirm.show{display:inline-flex}
-    .lightbox-confirm:active{background:#1b5e20}
+    /* Bestätigen-Buttons: untere linke Ecke des Bilds, nur sichtbar bei blocked/check-Zeilen.
+       Primary = "OK & weiter" (größer/prominenter), Secondary = "OK & schließen" daneben. */
+    /* Buttons stapeln vertikal in der linken unteren Bildecke, damit sie das X nicht überlappen.
+       Primary = OK & weiter (größer/prominenter), Secondary darunter. */
+    .lightbox-actions{position:absolute;bottom:10px;left:10px;display:none;flex-direction:column;align-items:flex-start;gap:6px;z-index:2;max-width:calc(100% - 70px)}
+    .lightbox-actions.show{display:flex}
+    .lightbox-confirm-next{height:52px;padding:0 18px;border-radius:26px;background:#2e7d32;color:#fff;border:none;font-size:15px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,.4);white-space:nowrap}
+    .lightbox-confirm-next:active{background:#1b5e20}
+    .lightbox-confirm{min-height:0;height:40px;padding:0 14px;border-radius:20px;background:rgba(255,255,255,.95);color:#1b5e20;border:1px solid #2e7d32;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+    .lightbox-confirm:active{background:#e8f5e9}
+    /* Toast für "Alle geprüft" */
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2e7d32;color:#fff;padding:12px 20px;border-radius:24px;font-weight:700;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.3);z-index:300;opacity:0;transition:opacity .25s ease;pointer-events:none}
+    .toast.show{opacity:1}
     /* Edit-Bereich unter dem Bild: Wagennummer + Status der geklickten Zeile */
     .lightbox-edit{margin-top:12px;width:100%;max-width:560px;background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.35);flex:0 0 auto}
     .lightbox-edit label{display:block;font-size:12px;font-weight:600;color:#444;margin-bottom:6px}
@@ -327,8 +336,8 @@
         <thead>
           <tr>
             <th class="col-status">Status</th>
-            <th class="col-num">Wagennummer</th>
             <th class="col-img">Bild</th>
+            <th class="col-num">Wagennummer</th>
             <th class="col-loc">Standort</th>
             <th class="col-date">Datum</th>
             <th class="col-ocr">OCR-Infos</th>
@@ -361,15 +370,22 @@
     <div class="lightbox-img-wrap">
       <img id="lightboxImg" src="" alt="">
       <div class="lightbox-hint">Wagennummer unten bearbeiten.</div>
-      <button class="lightbox-confirm" id="lightboxConfirm" aria-label="Wagennummer manuell bestätigen" type="button">✓ Manuell OK</button>
+      <div class="lightbox-actions" id="lightboxActions">
+        <button class="lightbox-confirm-next" id="lightboxConfirmNext" type="button" aria-label="Wagennummer bestätigen und nächste prüfen">✓ OK &amp; weiter</button>
+        <button class="lightbox-confirm" id="lightboxConfirm" type="button" aria-label="Wagennummer bestätigen und Lightbox schließen">OK &amp; schließen</button>
+      </div>
       <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
     </div>
     <div class="lightbox-edit" id="lightboxEdit" style="display:none">
+
       <label for="lightboxNumInput">Wagennummer</label>
       <input id="lightboxNumInput" type="text" inputmode="numeric" autocomplete="off" placeholder="manuell eingeben">
       <div class="lightbox-status" id="lightboxStatus"></div>
     </div>
   </div>
+
+  <!-- Toast für kurze Bestätigungs-Meldungen (z. B. "Alle geprüft") -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <!-- Override-Modal -->
   <div class="modal-bg" id="overrideModal">

@@ -834,6 +834,13 @@ resetBtn.addEventListener('click', () => {
   setStatus('Zurückgesetzt.', 'ok');
 });
 
+// ---------- Beispielfotos: Klick öffnet Lightbox ----------
+document.querySelectorAll('.example img[data-example]').forEach(img => {
+  img.addEventListener('click', () => {
+    openLightbox(img.src, img.alt);
+  });
+});
+
 // ---------- Feedback-Button ----------
 (() => {
   const fb = document.getElementById('feedbackBtn');

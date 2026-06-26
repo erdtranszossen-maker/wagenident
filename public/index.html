@@ -122,15 +122,18 @@
     .file-cell .name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .status-select{margin-top:6px;min-width:130px;padding:6px 8px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer}
     /* Lightbox: schwebt oben, blockiert das Eingabefeld der Zeile NICHT.
-       Nutzer kann parallel im Eingabefeld der Wagennummer tippen. */
-    .lightbox{display:none;position:fixed;top:0;left:0;right:0;height:45vh;background:rgba(0,0,0,.94);z-index:200;align-items:center;justify-content:center;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);pointer-events:auto}
+       Nutzer kann parallel im Eingabefeld der Wagennummer tippen.
+       Höhe richtet sich nach dem Bild (max 70vh), damit X und Hinweistext
+       IMMER am Bildrand kleben — nie mitten im Bild liegen. */
+    .lightbox{display:none;position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,.94);z-index:200;align-items:center;justify-content:center;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);pointer-events:auto}
     .lightbox.show{display:flex}
-    .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-    .lightbox-hint{position:absolute;left:14px;bottom:8px;color:#e8e6e0;font-size:12px;opacity:.85;max-width:calc(100% - 80px)}
-    /* Schließen-X klebt am Bild unten rechts, nicht am Viewport */
-    .lightbox-img-wrap{position:relative;display:inline-block;max-width:100%;max-height:100%}
-    .lightbox-img-wrap img{display:block;max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    /* Bild-Wrap: bestimmt die Lightbox-Höhe, X und Hint sind hier verankert */
+    .lightbox-img-wrap{position:relative;display:inline-block;max-width:100%;max-height:70vh;line-height:0}
+    .lightbox-img-wrap img{display:block;max-width:100%;max-height:70vh;width:auto;height:auto;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    /* Schließen-X: untere rechte Ecke des Bilds */
     .lightbox-close{position:absolute;bottom:10px;right:10px;width:44px;height:44px;border-radius:50%;background:#fff;color:#000;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2}
+    /* Hinweistext: untere linke Ecke des Bilds, nicht des Viewports */
+    .lightbox-hint{position:absolute;left:10px;bottom:10px;color:#fff;font-size:12px;line-height:1.35;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:8px;max-width:calc(100% - 70px);z-index:2}
 
     /* Tipps-Box */
     .tips-box{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff8e8;border:1px solid #f0d99e}
@@ -342,9 +345,9 @@
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="false" aria-label="Bildvorschau">
     <div class="lightbox-img-wrap">
       <img id="lightboxImg" src="" alt="">
+      <div class="lightbox-hint">Du kannst weiter unten in das Wagennummer-Feld tippen.</div>
       <button class="lightbox-close" id="lightboxClose" aria-label="Schließen">✕</button>
     </div>
-    <div class="lightbox-hint">Du kannst weiter unten in das Wagennummer-Feld tippen.</div>
   </div>
 
   <!-- Override-Modal -->

@@ -661,8 +661,9 @@ function openLightbox(src, name, rowId) {
       lightboxEdit.style.display = '';
       lightboxNumInput.value = row.formatted || row.digits || '';
       renderLightboxStatus(row);
-      // Bestätigen-Button nur bei blockierten Zeilen anzeigen — schneller Freigabe-Workflow
-      if (row.status === 'blocked') lightboxConfirm.classList.add('show');
+      // Bestätigen-Button bei blockierten ODER "Bitte prüfen"-Zeilen anzeigen
+      // (schneller Freigabe-Workflow für alle Zeilen, die manuelle Sichtprüfung brauchen)
+      if (row.status === 'blocked' || row.status === 'check') lightboxConfirm.classList.add('show');
       else lightboxConfirm.classList.remove('show');
     } else {
       lightboxEdit.style.display = 'none';

@@ -675,7 +675,10 @@ function closeLightbox() {
   lightboxEdit.style.display = 'none';
 }
 lightboxClose.addEventListener('click', closeLightbox);
-lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
+// Kein Backdrop-Klick-Close: Auf iOS führen Layout-Shifts beim Öffnen/Schließen der
+// Tastatur dazu, dass Touch-Endpunkte auf dem schwarzen Hintergrund landen und die
+// Lightbox versehentlich schließen, während der Nutzer die Wagennummer bearbeitet.
+// Schließen geht nur über den X-Button oder ESC.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeLightbox(); closeDetails(); } });
 
 // Lightbox-Wagennummer-Edit: gleiche Logik wie Tabellen-Input ('input' = roh, 'change' = validieren)

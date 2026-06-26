@@ -36,6 +36,11 @@ const overrideConfirm= $('overrideConfirm');
 const lightbox     = $('lightbox');
 const lightboxImg  = $('lightboxImg');
 const lightboxClose= $('lightboxClose');
+const lightboxEdit = $('lightboxEdit');
+const lightboxNumInput = $('lightboxNumInput');
+const lightboxStatus = $('lightboxStatus');
+// ID der Zeile, deren Bild aktuell in der Lightbox angezeigt wird (für Inline-Edit)
+let lightboxRowId = null;
 
 // Standard-Verteiler
 const loadStdBtn   = $('loadStdBtn');
@@ -498,19 +503,25 @@ function statusDropdown(row) {
 
 function renderRows() {
   if (!STATE.rows.length) {
-    resultsBody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">Noch keine Daten.</td></tr>';
+    resultsBody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Noch keine Daten.</td></tr>';
     summary.style.display = 'none';
     return;
   }
   resultsBody.innerHTML = STATE.rows.map(r => {
     const val = r.formatted || r.digits || '';
+    // Status-Hinweis bleibt unter Wagennummer (z. B. "Prüfziffer falsch", "Manuell freigegeben").
     const reason = r.reasons && r.reasons.length ? `<div class="reason">${escapeHtml(r.reasons.join(' · '))}</div>` : '';
-    const country = r.country ? `<div class="reason">${escapeHtml(r.country)}${r.confidence!=null?` · OCR ${(r.confidence*100).toFixed(0)}%`:''}</div>` : '';
+
+    // --- OCR-Infos-Spalte (neu, rechts vom Datum): nur für Admins/Diagnose ---
+    const ocrCountryLine = r.country
+      ? `<div class="ocr-line">${escapeHtml(r.country)}${r.confidence!=null?` · OCR ${(r.confidence*100).toFixed(0)}%`:''}</div>`
+      : (r.confidence!=null ? `<div class="ocr-line">OCR ${(r.confidence*100).toFixed(0)}%</div>` : '');
     const sourcePill = r.sourcePill ? `<span class="source-pill">${escapeHtml(r.sourcePill)}</span>` : '';
     const detailsBtn = (r.rawText || r.candidates?.length || r.attempts?.length || r.usedImageDataUrl)
       ? `<button type="button" class="details-btn" data-id="${r.id}">OCR-Details</button>` : '';
-    const reasonRow = (sourcePill || detailsBtn)
-      ? `<div class="reason-row" style="margin-top:6px">${sourcePill}${detailsBtn}</div>` : '';
+    const ocrActions = (sourcePill || detailsBtn)
+      ? `<div class="ocr-actions">${sourcePill}${detailsBtn}</div>` : '';
+    const ocrCell = (ocrCountryLine || ocrActions) ? `${ocrCountryLine}${ocrActions}` : '<span style="color:var(--muted)">—</span>';
 
     const thumb = r.thumbDataUrl
       ? `<img class="thumb thumb-zoom" data-id="${r.id}" src="${r.thumbDataUrl}" alt="Bild vergrößern" title="Bild vergrößern">`
@@ -525,12 +536,11 @@ function renderRows() {
         <td class="col-num">
           <input class="num-input" data-id="${r.id}" value="${escapeHtml(val)}" placeholder="manuell eingeben" inputmode="numeric" autocomplete="off" />
           ${reason}
-          ${country}
-          ${reasonRow}
         </td>
         <td class="col-img">${thumb}</td>
         <td class="col-loc">${escapeHtml(r.standort)}<div class="reason" style="font-size:11px" title="${escapeHtml(r.fileName)}">${escapeHtml(r.fileName)}</div></td>
         <td class="col-date">${r.datum}</td>
+        <td class="col-ocr">${ocrCell}</td>
       </tr>`;
   }).join('');
 
@@ -583,7 +593,7 @@ function renderRows() {
     img.addEventListener('click', () => {
       const row = STATE.rows.find(x => x.id === img.dataset.id);
       if (!row) return;
-      openLightbox(row.fullDataUrl || row.thumbDataUrl, row.fileName);
+      openLightbox(row.fullDataUrl || row.thumbDataUrl, row.fileName, row.id);
     });
   });
 
@@ -623,20 +633,82 @@ function updateExportGates() {
 }
 
 // ---------- Lightbox ----------
-function openLightbox(src, name) {
+// Variante B: Lightbox enthält Bild + Wagennummer-Edit-Feld der geklickten Zeile direkt darunter.
+// Beim Fokus auf das Edit-Feld schrumpft das Bild (Klasse 'editing'), damit das Feld bei
+// aufklappender iOS-Tastatur sichtbar bleibt.
+function renderLightboxStatus(row) {
+  if (!row) { lightboxStatus.textContent = ''; lightboxStatus.className = 'lightbox-status'; return; }
+  const reasons = (row.reasons && row.reasons.length) ? row.reasons.join(' · ') : '';
+  lightboxStatus.textContent = reasons;
+  lightboxStatus.className = 'lightbox-status';
+  if (row.status === 'blocked' || (reasons && /falsch|ungültig|blockiert/i.test(reasons))) {
+    lightboxStatus.classList.add('bad');
+  } else if (row.status === 'manual_ok' || row.status === 'auto_ok') {
+    lightboxStatus.classList.add('ok');
+  }
+}
+function openLightbox(src, name, rowId) {
   lightboxImg.src = src;
   lightboxImg.alt = name || '';
   lightbox.classList.add('show');
-  // KEIN body-overflow-Lock: das Eingabefeld in der Zeile darf weiterhin bedient werden,
-  // damit der Nutzer das Bild als Referenz nutzt und parallel tippt.
+  lightbox.classList.remove('editing');
+  lightboxRowId = rowId || null;
+  // Edit-Bereich nur zeigen, wenn eine echte Tabellenzeile dahinter steht (nicht bei Beispielfotos)
+  if (rowId) {
+    const row = STATE.rows.find(x => x.id === rowId);
+    if (row) {
+      lightboxEdit.style.display = '';
+      lightboxNumInput.value = row.formatted || row.digits || '';
+      renderLightboxStatus(row);
+    } else {
+      lightboxEdit.style.display = 'none';
+    }
+  } else {
+    lightboxEdit.style.display = 'none';
+  }
 }
 function closeLightbox() {
   lightbox.classList.remove('show');
+  lightbox.classList.remove('editing');
   lightboxImg.src = '';
+  lightboxRowId = null;
+  lightboxEdit.style.display = 'none';
 }
 lightboxClose.addEventListener('click', closeLightbox);
 lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeLightbox(); closeDetails(); } });
+
+// Lightbox-Wagennummer-Edit: gleiche Logik wie Tabellen-Input ('input' = roh, 'change' = validieren)
+lightboxNumInput.addEventListener('focus', () => { lightbox.classList.add('editing'); });
+lightboxNumInput.addEventListener('blur',  () => { lightbox.classList.remove('editing'); });
+lightboxNumInput.addEventListener('input', () => {
+  if (!lightboxRowId) return;
+  const row = STATE.rows.find(x => x.id === lightboxRowId);
+  if (!row) return;
+  row.formatted = lightboxNumInput.value;
+  row.manualEdited = true;
+  // Tabellen-Input synchron halten, ohne Re-Render
+  const tableInput = document.querySelector(`input.num-input[data-id="${lightboxRowId}"]`);
+  if (tableInput && tableInput.value !== lightboxNumInput.value) tableInput.value = lightboxNumInput.value;
+});
+lightboxNumInput.addEventListener('change', () => {
+  if (!lightboxRowId) return;
+  const row = STATE.rows.find(x => x.id === lightboxRowId);
+  if (!row) return;
+  const decision = decideManualEntry(lightboxNumInput.value);
+  row.digits = decision.digits;
+  row.formatted = decision.formatted || lightboxNumInput.value;
+  row.status = decision.status === 'auto_ok' ? 'manual_ok' : decision.status;
+  row.reasons = decision.reasons;
+  row.country = decision.country;
+  row.confidence = 0;
+  row.manualEdited = true;
+  renderRows();
+  updateSummary();
+  updateExportGates();
+  // Status-Anzeige in der Lightbox aktualisieren
+  renderLightboxStatus(row);
+});
 
 // ---------- OCR-Details-Modal ----------
 function openDetails(row) {
@@ -832,6 +904,13 @@ resetBtn.addEventListener('click', () => {
   refreshFileCount();
   updateExportGates();
   setStatus('Zurückgesetzt.', 'ok');
+});
+
+// ---------- Beispielfotos: Klick öffnet Lightbox ----------
+document.querySelectorAll('.example img[data-example]').forEach(img => {
+  img.addEventListener('click', () => {
+    openLightbox(img.src, img.alt);
+  });
 });
 
 // ---------- Feedback-Button ----------
